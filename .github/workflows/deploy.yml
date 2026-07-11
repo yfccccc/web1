@@ -1,9 +1,18 @@
 name: Deploy to Server
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      manage_seo_cron:
+        description: "Explicitly install or update the cnzhengmu SEO cron"
+        required: false
+        type: boolean
+        default: false
+      run_seo_validation:
+        description: "Explicitly run production SEO generation validation"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-main
@@ -49,6 +58,7 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment: production
     env:
       DEPLOY_HOST: "123.60.14.103"
       DEPLOY_USER: "root"
@@ -204,12 +214,7 @@ jobs:
 
             stage="prisma-sync"
             echo "[deploy] syncing prisma schema"
-            if ! npx prisma migrate deploy; then
-              echo "::warning::[deploy] prisma migrate deploy failed, falling back to prisma db push"
-              if ! npx prisma db push; then
-                echo "::warning::[deploy] prisma db push also failed, continuing with existing schema"
-              fi
-            fi
+            npx prisma migrate deploy
 
             stage="build-prepare"
             echo "[deploy] preparing isolated next build"
@@ -325,7 +330,6 @@ jobs:
             stage="verify-service"
             sudo systemctl status web1 --no-pager -l
           EOF
-
       - name: Health check production site
         run: |
           node - <<'NODE'
@@ -414,6 +418,7 @@ jobs:
           NODE
 
       - name: Install or update production SEO cron
+        if: ${{ inputs.manage_seo_cron == true }}
         run: |
           ssh -o BatchMode=yes -p "${DEPLOY_PORT}" ${DEPLOY_USER}@${DEPLOY_HOST} <<'EOF'
             set -euo pipefail
@@ -470,7 +475,7 @@ jobs:
           EOF
 
       - name: Manual production SEO generation validation
-        if: github.event_name == 'workflow_dispatch'
+        if: ${{ inputs.run_seo_validation == true }}
         continue-on-error: true
         run: |
           ssh -o BatchMode=yes -p "${DEPLOY_PORT}" ${DEPLOY_USER}@${DEPLOY_HOST} <<'EOF'
@@ -577,7 +582,7 @@ jobs:
           EOF
 
       - name: Simulate production SEO timer check
-        if: github.event_name == 'workflow_dispatch'
+        if: ${{ inputs.run_seo_validation == true }}
         run: |
           ssh -o BatchMode=yes -p "${DEPLOY_PORT}" ${DEPLOY_USER}@${DEPLOY_HOST} <<'EOF'
             set -euo pipefail
@@ -604,7 +609,7 @@ jobs:
           EOF
 
       - name: Mark today's SEO test drafts to exclude them from dedup
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[seo-test-cleanup]')
+        if: ${{ false }}
         run: |
           ssh -o BatchMode=yes -p "${DEPLOY_PORT}" ${DEPLOY_USER}@${DEPLOY_HOST} <<'EOF'
             set -euo pipefail
@@ -664,64 +669,3 @@ jobs:
               echo "::notice::[deploy] cleaned backup directory ${backup_dir}"
             fi
           EOF
-
-      - name: Sync 10 sample news articles to production database
-        continue-on-error: true
-        run: |
-          echo "sync local: start"
-          echo "sync local: before ssh"
-          ssh -o BatchMode=yes -p "${DEPLOY_PORT}" ${DEPLOY_USER}@${DEPLOY_HOST} <<'EOF'
-          cd /home/web1
-          echo "sync remote: entered"
-          whoami
-          pwd
-          node -v
-          echo "database_url_present=${DATABASE_URL:+yes}"
-          npx ts-node --transpile-only -P scripts/tsconfig.scripts.json scripts/sync-prod-sample-news.ts
-          echo "sync remote: after script"
-          echo "sync remote: end"
-          EOF
-          echo "sync local: after ssh"
-
-      - name: Verify 10 sample news URLs
-        continue-on-error: true
-        run: |
-          sleep 15
-          node - <<'NODE'
-          const samples = [
-            ["https://cnzhengmu.com/news/qiye/129759.html", "https://cnzhengmu.com/news/ju-shi-jiang-cheng-zhi-ling-zheng-zhuang-zhong-guo-fan-jia-ju-chuang-xin-lun-tan"],
-            ["https://cnzhengmu.com/companynews/10665932-182579728.html", "https://cnzhengmu.com/news/si-lu-qi-dian-she-ji-xin-zhang-2025-xi-an-dang-dai-she-ji-zhou-sheng-da-qi-mu"],
-            ["https://cnzhengmu.com/news/qiye/129029.html", "https://cnzhengmu.com/news/ao-mu-zhi-neng-hu-yan-deng-shang-shi-yong-dong-ni-de-dong-tai-zi-ran-guang-da-za"],
-            ["https://cnzhengmu.com/companynews/10665932-182579618.html", "https://cnzhengmu.com/news/20-wan-ren-ci-gong-fu-xi-bu-she-ji-kuang-huan-2025-xi-an-dang-dai-she-ji-zhou-yu"],
-            ["https://cnzhengmu.com/companynews/10665932-182579062.html", "https://cnzhengmu.com/news/ke-ji-yin-ling-xiao-liang-ling-xian-an-ji-er-shang-yong-zhi-ji-xi-lie-xin-pin-fa"],
-            ["https://cnzhengmu.com/news/shichang/130093.html", "https://cnzhengmu.com/news/2025-nian-shi-jie-lin-mu-ye-da-hui-ji-2025-nian-guang-xi-guo-ji-lin-chan-pin-ji-"],
-            ["https://cnzhengmu.com/companynews/10665932-182579200.html", "https://cnzhengmu.com/news/ao-shi-mi-si-hei-ke-ji-tu-po-quan-shi-gao-shui-xiao-heng-jing-xi-tong-zhong-su-b"],
-            ["https://cnzhengmu.com/news/qiye/129235.html", "https://cnzhengmu.com/news/ma-lai-xi-ya-guo-ji-jia-ju-zhan-zhun-bei-jiu-xu-wei-2025-nian-ya-zhou-cai-gou-ji"],
-            ["https://cnzhengmu.com/news/qiye/129331.html", "https://cnzhengmu.com/news/chun-zhan-xin-pian-shou-zhan-gao-jie-wu-han-zheng-zhuang-ding-zhi-jia-ju-zhan-yu"],
-            ["https://cnzhengmu.com/news/hangye/130005.html", "https://cnzhengmu.com/news/ye-ji-ni-liu-er-shang-san-ke-shu-jing-li-run-da-zhang-chao-90-fang-shui-cai-liao"],
-          ];
-
-          function pick(html, pattern) {
-            const match = html.match(pattern);
-            return match ? match[1] : "";
-          }
-
-          (async () => {
-            for (const [oldUrl, newUrl] of samples) {
-              const oldRes = await fetch(oldUrl, { redirect: "manual" });
-              const newRes = await fetch(newUrl, { redirect: "manual" });
-              const html = newRes.status === 200 ? await newRes.text() : "";
-              const title = pick(html, /<title>([^<]*)<\/title>/i);
-              const description = pick(html, /<meta[^>]+name="description"[^>]+content="([^"]*)"/i);
-              const canonical = pick(html, /<link[^>]+rel="canonical"[^>]+href="([^"]*)"/i);
-
-              console.log(`::warning::VERIFY old=${oldUrl} old_status=${oldRes.status} location=${oldRes.headers.get("location") || ""}`);
-              console.log(`::warning::VERIFY new=${newUrl} new_status=${newRes.status} title=${title}`);
-              console.log(`::warning::VERIFY meta description=${description}`);
-              console.log(`::warning::VERIFY meta canonical=${canonical}`);
-            }
-          })().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
-          NODE

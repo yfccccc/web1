@@ -15,6 +15,7 @@ type ConsumeRateLimitInput = {
   identifier: string;
   limit: number;
   windowMs: number;
+  maxBuckets?: number;
 };
 
 type ConsumeRateLimitResult = {
@@ -49,6 +50,13 @@ function sweepExpiredBuckets(now: number) {
   });
 }
 
+function sweepExpiredBucketsNow(now: number) {
+  const store = getRateLimitStore();
+  store.forEach((bucket, key) => {
+    if (bucket.resetAt <= now) store.delete(key);
+  });
+}
+
 function normalizeIdentifier(value: string) {
   return value.trim().toLowerCase();
 }
@@ -69,6 +77,19 @@ export function getClientIp(request: Request) {
   return "unknown";
 }
 
+export function getTrustedClientIp(
+  request: Request,
+  trustProxyHeaders = process.env.TRUST_PROXY_HEADERS?.trim().toLowerCase() === "true",
+): string | null {
+  const requestIp = (request as Request & { ip?: string | null }).ip?.trim();
+  if (requestIp) return requestIp;
+  if (!trustProxyHeaders) return null;
+
+  const firstHop = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  if (firstHop) return firstHop;
+  return request.headers.get("x-real-ip")?.trim() || null;
+}
+
 export function consumeRateLimit(input: ConsumeRateLimitInput): ConsumeRateLimitResult {
   const now = Date.now();
   sweepExpiredBuckets(now);
@@ -78,6 +99,22 @@ export function consumeRateLimit(input: ConsumeRateLimitInput): ConsumeRateLimit
   const bucket = store.get(key);
 
   if (!bucket || bucket.resetAt <= now) {
+    const scopePrefix = `${input.scope}:`;
+    let scopeSize = 0;
+    store.forEach((_value, key) => {
+      if (key.startsWith(scopePrefix)) scopeSize += 1;
+    });
+    const maxBuckets = input.maxBuckets ?? Number.POSITIVE_INFINITY;
+    if (scopeSize >= maxBuckets) {
+      sweepExpiredBucketsNow(now);
+      scopeSize = 0;
+      store.forEach((_value, key) => {
+        if (key.startsWith(scopePrefix)) scopeSize += 1;
+      });
+      if (scopeSize >= maxBuckets) {
+        return { allowed: false, remaining: 0, retryAfterSec: 60 };
+      }
+    }
     store.set(key, {
       count: 1,
       resetAt: now + input.windowMs,
@@ -118,3 +155,6 @@ export function createRateLimitResponse(retryAfterSec = 60) {
     }
   );
 }
+
+// Single-instance baseline only: restart clears state and multiple instances do
+// not share counters. Any future shared limiter must use an app-specific namespace.

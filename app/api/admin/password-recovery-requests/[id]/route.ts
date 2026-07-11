@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, requireAdminOrSuper } from "@/lib/session";
 import { issuePasswordResetForMember, normalizeRecoveryEmail } from "@/lib/password-recovery";
 import { writeOperationLog } from "@/lib/operation-log";
+import { buildSafeErrorLog, maskEmail } from "@/lib/log-safety";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +17,13 @@ export async function PATCH(
     return NextResponse.json({ error: "仅管理员可操作。" }, { status: 403 });
   }
   const adminSession = session;
+  const requestId = randomUUID();
+  let targetId = "unresolved";
+  let stage = "load_request";
 
   try {
     const { id } = await params;
+    targetId = id;
     const body = await request.json().catch(() => ({}));
     const action = typeof body?.action === "string" ? body.action : "";
     const adminNote = typeof body?.adminNote === "string" ? body.adminNote.trim().slice(0, 300) : null;
@@ -48,6 +54,7 @@ export async function PATCH(
     }
 
     if (action === "save") {
+      stage = "save_recovery_request";
       const updated = await prisma.$transaction(async (tx) => {
         if (recoveryRequest.member && rawRecoveryEmail !== "") {
           await tx.member.update({
@@ -74,13 +81,14 @@ export async function PATCH(
         action: "password_recovery_request_saved",
         targetType: "password_recovery_request",
         targetId: id,
-        detail: JSON.stringify({ recoveryEmail, adminNote }),
+        detail: JSON.stringify({ recoveryEmail: maskEmail(recoveryEmail), hasAdminNote: Boolean(adminNote) }),
       });
 
       return NextResponse.json({ ok: true, item: updated });
     }
 
     if (action === "send_reset") {
+      stage = "deliver_password_reset";
       if (!recoveryRequest.member) {
         return NextResponse.json({ error: "该申请未匹配到有效账号，无法发送重置链接。" }, { status: 400 });
       }
@@ -144,7 +152,7 @@ export async function PATCH(
         action: "password_recovery_request_sent_reset",
         targetType: "password_recovery_request",
         targetId: id,
-        detail: JSON.stringify({ deliveryEmail: result.deliveryEmail }),
+        detail: JSON.stringify({ deliveryEmail: maskEmail(result.deliveryEmail) }),
       });
 
       return NextResponse.json({
@@ -159,6 +167,7 @@ export async function PATCH(
     }
 
     if (action === "resolve" || action === "reject") {
+      stage = "resolve_recovery_request";
       const status = action === "resolve" ? "resolved" : "rejected";
       const updated = await prisma.passwordRecoveryRequest.update({
         where: { id },
@@ -176,7 +185,7 @@ export async function PATCH(
         action: `password_recovery_request_${status}`,
         targetType: "password_recovery_request",
         targetId: id,
-        detail: JSON.stringify({ adminNote }),
+        detail: JSON.stringify({ hasAdminNote: Boolean(adminNote) }),
       });
 
       return NextResponse.json({ ok: true, item: updated });
@@ -184,7 +193,13 @@ export async function PATCH(
 
     return NextResponse.json({ error: "不支持的操作。" }, { status: 400 });
   } catch (error) {
-    console.error("PATCH /api/admin/password-recovery-requests/[id]", error);
+    console.error("PATCH /api/admin/password-recovery-requests/[id]", buildSafeErrorLog({
+      eventCode: "PASSWORD_RECOVERY_ADMIN_UPDATE_FAILED",
+      requestId,
+      targetId,
+      actorId: adminSession.sub,
+      stage,
+    }, error));
     return NextResponse.json(
       {
         error: "邮件发送失败或处理找回申请失败，请稍后重试。",

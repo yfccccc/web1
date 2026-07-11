@@ -9,6 +9,7 @@ import {
   NEWS_PENDING_BRAND_BLACKLIST,
   NEWS_STOPWORDS,
 } from "@/lib/news-keyword-config-v2";
+import { applyPendingBrandPolicy } from "@/lib/pending-brand-policy";
 
 const KEYWORD_MARKETING_TERMS_CN = [
   "\u90fd",
@@ -567,10 +568,10 @@ export async function extractNewsKeywords(input: ArticleKeywordInput): Promise<K
     }));
 
   const finalKeywords = ranked.length > 0 ? ranked : buildFallbackKeywords(title, entries);
-  return {
+  return applyPendingBrandPolicy({
     keywords: finalKeywords.slice(0, Math.max(3, Math.min(5, finalKeywords.length))),
-    pendingBrands: [],
-  };
+    pendingBrandCandidates: [],
+  });
 }
 
 export async function syncArticleKeywords(options: {
