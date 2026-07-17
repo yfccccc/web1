@@ -72,7 +72,12 @@ export function resolvePermissionFlags(input: PermissionInput): PermissionFlags 
     };
   }
 
-  return { ...EMPTY_FLAGS };
+  return {
+    ...EMPTY_FLAGS,
+    canPublishWithoutReview: input.canPublishWithoutReview === true,
+    canDeleteOwnContent: input.canDeleteOwnContent === true,
+    canEditOwnContent: input.canEditOwnContent === true,
+  };
 }
 
 export function resolveSubmissionStatus(options?: {
