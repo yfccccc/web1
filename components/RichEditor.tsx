@@ -1413,6 +1413,17 @@ export function RichEditor({
 
         <ToolButton label="无序列表" active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()} toolbarIcons={toolbarIcons} />
         <ToolButton label="有序列表" active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} toolbarIcons={toolbarIcons} />
+        <ToolButton label="引用" active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()} toolbarIcons={toolbarIcons} />
+        <ToolButton label="插入表格" onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} toolbarIcons={toolbarIcons} />
+        {editor.isActive("table") ? (
+          <>
+            <ToolButton label="增加行" onClick={() => editor.chain().focus().addRowAfter().run()} toolbarIcons={toolbarIcons} />
+            <ToolButton label="增加列" onClick={() => editor.chain().focus().addColumnAfter().run()} toolbarIcons={toolbarIcons} />
+            <ToolButton label="删除行" onClick={() => editor.chain().focus().deleteRow().run()} toolbarIcons={toolbarIcons} />
+            <ToolButton label="删除列" onClick={() => editor.chain().focus().deleteColumn().run()} toolbarIcons={toolbarIcons} />
+            <ToolButton label="删除表格" onClick={() => editor.chain().focus().deleteTable().run()} toolbarIcons={toolbarIcons} />
+          </>
+        ) : null}
 
         <ToolButton label="撤销" onClick={() => editor.chain().focus().undo().run()} toolbarIcons={toolbarIcons} />
         <ToolButton label="重做" onClick={() => editor.chain().focus().redo().run()} toolbarIcons={toolbarIcons} />

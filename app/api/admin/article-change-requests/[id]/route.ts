@@ -39,9 +39,7 @@ export async function PATCH(
   if (status === "approved") {
     const patchData = applyArticlePatch(req.article, req);
     if (Object.keys(patchData).length > 0) {
-      const isDictionary =
-        req.article.categoryHref?.startsWith("/dictionary") || req.article.subHref?.startsWith("/dictionary");
-      if (!isDictionary && typeof patchData.content === "string") {
+      if (typeof patchData.content === "string") {
         patchData.content = normalizeRichTextField(patchData.content) ?? "";
       }
       if (typeof patchData.title === "string") {

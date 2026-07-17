@@ -51,10 +51,6 @@ import {
   hasAutoSeoSource,
 } from "@/lib/document-seo";
 import { slugify } from "@/lib/slug";
-import {
-  formatTermContentForEditing,
-  normalizeTermContent,
-} from "@/lib/term-structured";
 import { InlinePageBackLink } from "@/components/InlinePageBackLink";
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
 
@@ -276,7 +272,7 @@ function buildAutoExcerpt(text: string) {
 }
 
 function isRichTextArticleTab(tab: ContentTabKey) {
-  return tab === "articles" || tab === "buying";
+  return tab === "articles" || tab === "buying" || tab === "terms";
 }
 
 function getPublishTabHint(tab: ContentTabKey) {
@@ -289,7 +285,7 @@ function getPublishTabHint(tab: ContentTabKey) {
   }
 
   if (tab === "terms") {
-    return "支持词条内容整理、自动结构识别与文档信息维护。";
+    return "支持富文本正文、图片和表格、Word 文档导入及文档信息维护。";
   }
 
   return null;
@@ -953,8 +949,6 @@ export default function AdminContentPage() {
     const composedContent =
       tab === "brands"
           ? buildBrandStructuredHtml(brandStructured)
-          : tab === "terms"
-            ? normalizeTermContent(content)
           : tab === "standards"
             ? content
             : tab === "industry-data"
@@ -1070,7 +1064,7 @@ export default function AdminContentPage() {
     setEditOwnedEnterpriseSearch("");
     setEditOwnedEnterpriseOpen(false);
     setEditExcerpt(item.excerpt ?? "");
-    setEditContent(tab === "terms" ? formatTermContentForEditing(item.content) : item.content);
+    setEditContent(item.content);
     setEditBrandStructured(
       tab === "brands"
         ? parseBrandStructuredHtml(item.content) ?? createDefaultBrandStructuredData()
@@ -1128,7 +1122,7 @@ export default function AdminContentPage() {
         ""
     );
     setEditExcerpt(item.patchExcerpt ?? item.article.excerpt ?? "");
-    setEditContent(tab === "terms" ? formatTermContentForEditing(nextContent) : nextContent);
+    setEditContent(nextContent);
     setEditBrandStructured(
       tab === "brands"
         ? parseBrandStructuredHtml(nextContent) ?? createDefaultBrandStructuredData()
@@ -1169,8 +1163,6 @@ export default function AdminContentPage() {
     const composedEditContent =
       tab === "brands"
           ? buildBrandStructuredHtml(editBrandStructured)
-          : tab === "terms"
-            ? normalizeTermContent(editContent)
           : tab === "standards"
             ? editContent
             : tab === "industry-data"
@@ -1685,21 +1677,6 @@ export default function AdminContentPage() {
                 )}
               </>
             )}
-            {tab === "terms" && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <label className="block text-sm text-muted">词条正文</label>
-                  <p className="text-xs text-muted">可直接按普通文本输入，系统会自动识别“一、二、三”这类标题并整理为词条结构。</p>
-                </div>
-                <textarea
-                  className="w-full min-h-[320px] rounded-2xl border border-border bg-surface px-3 py-3 text-sm leading-7 text-primary"
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder={"示例：\n一、概述\n全屋整木定制是在整木定制基础上，实现全空间覆盖的系统化木作解决方案。\n\n二、基本信息\n覆盖范围：全屋\n核心：整体设计"}
-                />
-              </div>
-            )}
-
             {tab === "standards" && (
               <>
                 <label className="block text-sm text-muted">标准正文</label>
@@ -2105,20 +2082,7 @@ export default function AdminContentPage() {
                 </div>
               </>
             )}
-            {tab === "terms" ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <label className="block text-sm text-muted">词条正文</label>
-                  <p className="text-xs text-muted">可直接按普通文本修改，系统会自动整理结构。</p>
-                </div>
-                <textarea
-                  className="w-full min-h-[320px] rounded-2xl border border-border bg-surface px-3 py-3 text-sm leading-7 text-primary"
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  placeholder={"示例：\n一、概述\n全屋整木定制是在整木定制基础上，实现全空间覆盖的系统化木作解决方案。\n\n二、基本信息\n覆盖范围：全屋\n核心：整体设计"}
-                />
-              </div>
-            ) : tab === "standards" ? (
+            {tab === "standards" ? (
               <>
                 <label className="block text-sm text-muted">标准正文</label>
                 <RichEditor

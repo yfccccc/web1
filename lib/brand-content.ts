@@ -499,6 +499,10 @@ export function sanitizeRichText(input: string | null | undefined) {
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<(?:meta|link|base|input|button|textarea|select)\b[^>]*>/gi, "")
     .replace(/<\/(?:meta|link|base|input|button|textarea|select)>/gi, "");
+  html = html.replace(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi, (match, attrs, inner) => {
+    const href = parseAttributes(attrs).get("href") ?? "";
+    return isSafeHref(href) ? match : inner;
+  });
   html = normalizeUnsafeWrappers(html);
   html = html.replace(/<h1\b/gi, "<h2").replace(/<\/h1>/gi, "</h2>");
   html = html.replace(/<br\s*\/?>/gi, "<br>");

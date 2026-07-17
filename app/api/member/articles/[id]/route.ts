@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { normalizeRichTextField } from "@/lib/brand-content";
-import { isValidTermStructuredContent, normalizeTermContent } from "@/lib/term-structured";
 import { findDuplicateArticleByTitle, normalizeArticleTitle } from "@/lib/article-title";
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
 import { revalidateBuyingArticlePaths } from "@/lib/buying-summary";
@@ -59,19 +58,6 @@ export async function PATCH(
     if (existingTitle) {
       return NextResponse.json({ error: "标题已存在，请更换一个新的标题" }, { status: 400 });
     }
-  }
-
-  const nextCategoryHref =
-    typeof data.categoryHref === "string" ? (data.categoryHref as string) : article.categoryHref;
-  const nextSubHref =
-    typeof data.subHref === "string" ? (data.subHref as string) : article.subHref;
-  const isDictionary =
-    nextCategoryHref?.startsWith("/dictionary") || nextSubHref?.startsWith("/dictionary");
-  if (isDictionary && typeof data.content === "string") {
-    data.content = normalizeTermContent(data.content);
-  }
-  if (isDictionary && typeof data.content === "string" && !isValidTermStructuredContent(data.content)) {
-    return NextResponse.json({ error: "词库内容必须按固定小标题分节格式提交" }, { status: 400 });
   }
 
   const dirtyTextError = buildDirtyTextErrorMessage([

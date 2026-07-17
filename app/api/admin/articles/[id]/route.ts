@@ -10,7 +10,6 @@ import {
   canDirectlyEditArticle,
   canReviewSubmissions,
 } from "@/lib/content-permissions";
-import { isValidTermStructuredContent, normalizeTermContent } from "@/lib/term-structured";
 import { findDuplicateArticleByTitle, normalizeArticleTitle } from "@/lib/article-title";
 import { formatKeywordCsv, syncArticleKeywords } from "@/lib/news-keywords-v2";
 import { buildNewsPath } from "@/lib/share-config";
@@ -22,10 +21,6 @@ import { revalidateBuyingArticlePaths } from "@/lib/buying-summary";
 
 function isAdmin(session: { role: string | null } | null) {
   return session?.role === "SUPER_ADMIN" || session?.role === "ADMIN";
-}
-
-function isDictionaryPath(input: string | null | undefined) {
-  return typeof input === "string" && input.startsWith("/dictionary");
 }
 
 function canAccessAdminArticleDetail(
@@ -222,11 +217,6 @@ export async function PATCH(
     }
   }
 
-  const nextCategoryHref =
-    typeof categoryHref === "string" ? categoryHref.trim() || null : target.categoryHref;
-  const nextSubHref = typeof subHref === "string" ? subHref.trim() || null : target.subHref;
-  const isDictionary = isDictionaryPath(nextCategoryHref) || isDictionaryPath(nextSubHref);
-
   const data: Record<string, unknown> = {};
   if (typeof title === "string") data.title = normalizeArticleTitle(title);
   if (typeof slug === "string") {
@@ -247,7 +237,7 @@ export async function PATCH(
   if (typeof sourceUrl === "string") data.sourceUrl = sourceUrl.trim() || null;
   if (typeof displayAuthor === "string") data.displayAuthor = displayAuthor.trim() || null;
   if (typeof content === "string") {
-    data.content = isDictionary ? normalizeTermContent(content) : normalizeRichTextField(content) ?? "";
+    data.content = normalizeRichTextField(content) ?? "";
   }
   if (typeof coverImage === "string") data.coverImage = coverImage.trim() || null;
   if (typeof subHref === "string") data.subHref = subHref.trim() || null;
@@ -310,10 +300,6 @@ export async function PATCH(
     if (existingTitle) {
       return NextResponse.json({ error: "标题已存在，请更换一个新的标题" }, { status: 400 });
     }
-  }
-
-  if (isDictionary && typeof data.content === "string" && !isValidTermStructuredContent(data.content)) {
-    return NextResponse.json({ error: "词库内容必须按固定小标题分节格式提交" }, { status: 400 });
   }
 
   const dirtyTextError = buildDirtyTextErrorMessage([

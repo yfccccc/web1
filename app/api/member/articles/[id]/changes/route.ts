@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { buildArticleDiffSummary, buildArticlePatchData } from "@/lib/article-change";
 import { writeOperationLog } from "@/lib/operation-log";
 import { normalizeRichTextField } from "@/lib/brand-content";
-import { isValidTermStructuredContent, normalizeTermContent } from "@/lib/term-structured";
 import { findDuplicateArticleByTitle, normalizeArticleTitle } from "@/lib/article-title";
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
 
@@ -38,11 +37,7 @@ export async function POST(
     title: typeof body.title === "string" ? normalizeArticleTitle(body.title) : body.title,
     slug: body.slug,
     excerpt: body.excerpt,
-    content:
-      (article.categoryHref?.startsWith("/dictionary") || article.subHref?.startsWith("/dictionary")) &&
-      typeof body.content === "string"
-        ? normalizeTermContent(body.content)
-        : normalizeRichTextField(body.content),
+    content: normalizeRichTextField(body.content),
     coverImage: body.coverImage,
     subHref: body.subHref,
     categoryHref: body.categoryHref,
@@ -61,17 +56,6 @@ export async function POST(
     const existingTitle = await findDuplicateArticleByTitle(patch.patchTitle, article.id);
     if (existingTitle) {
       return NextResponse.json({ error: "标题已存在，请更换一个新的标题" }, { status: 400 });
-    }
-  }
-
-  const isDictionary =
-    article.categoryHref?.startsWith("/dictionary") || article.subHref?.startsWith("/dictionary");
-  if (isDictionary) {
-    if (!patch.patchTitle || !patch.patchContent) {
-      return NextResponse.json({ error: "词库修改需按固定格式提交：标题/摘要/小标题正文" }, { status: 400 });
-    }
-    if (!isValidTermStructuredContent(patch.patchContent)) {
-      return NextResponse.json({ error: "词库正文需为小标题分节格式（小标题+正文）" }, { status: 400 });
     }
   }
 

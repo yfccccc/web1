@@ -3,7 +3,7 @@ import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { buildArticleDiffSummary, buildArticlePatchData } from "@/lib/article-change";
 import { writeOperationLog } from "@/lib/operation-log";
-import { isValidTermStructuredContent, normalizeTermContent } from "@/lib/term-structured";
+import { normalizeRichTextField } from "@/lib/brand-content";
 import { findDuplicateArticleByTitle, normalizeArticleTitle } from "@/lib/article-title";
 
 function canDirectlyEdit(session: NonNullable<Awaited<ReturnType<typeof getSession>>>, authorMemberId: string | null) {
@@ -79,9 +79,8 @@ export async function PATCH(
 
   const body = await request.json().catch(() => ({}));
   const title = typeof body.title === "string" ? normalizeArticleTitle(body.title) : "";
-  const hasExcerptField = typeof body.excerpt === "string";
-  const excerpt = hasExcerptField ? body.excerpt : "";
-  const content = typeof body.content === "string" ? normalizeTermContent(body.content) : "";
+  const excerpt = typeof body.excerpt === "string" ? body.excerpt : article.excerpt ?? "";
+  const content = normalizeRichTextField(body.content) ?? "";
   const reason = typeof body.reason === "string" ? body.reason.trim() : "";
 
   if (!title || !content.trim()) {
@@ -91,15 +90,6 @@ export async function PATCH(
   if (existingTitle) {
     return NextResponse.json({ error: "标题已存在，请更换一个新的标题" }, { status: 400 });
   }
-  if (!hasExcerptField) {
-    return NextResponse.json({ error: "词库修改需按固定格式提交：标题/摘要/小标题正文" }, { status: 400 });
-  }
-  const sectionCount = (content.match(/<section>/g) ?? []).length;
-  const headingCount = (content.match(/<h3>/g) ?? []).length;
-  if (sectionCount === 0 || headingCount === 0) {
-    return NextResponse.json({ error: "词库内容需按固定小标题分节提交" }, { status: 400 });
-  }
-
   const direct = canDirectlyEdit(session, article.authorMemberId);
   if (direct) {
     const updated = await prisma.article.update({

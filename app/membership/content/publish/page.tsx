@@ -68,10 +68,6 @@ import {
   hasAutoSeoSource,
 } from "@/lib/document-seo";
 import { slugify } from "@/lib/slug";
-import {
-  formatTermContentForEditing,
-  normalizeTermContent,
-} from "@/lib/term-structured";
 import { InlinePageBackLink } from "@/components/InlinePageBackLink";
 import { PUBLIC_CONTACT_PHONE } from "@/lib/public-site-config";
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
@@ -815,8 +811,6 @@ function PublishCenterPageInner() {
     const composedContent =
       safeTab === "brands"
           ? buildBrandStructuredHtml(brandStructured)
-          : safeTab === "terms"
-            ? normalizeTermContent(content)
           : safeTab === "standards"
             ? content.trim()
             : safeTab === "industry-data"
@@ -940,7 +934,7 @@ function PublishCenterPageInner() {
     setEditSlug(item.slug ?? "");
     setEditTitle(item.title ?? "");
     setEditExcerpt(item.excerpt ?? "");
-    setEditContent(safeTab === "terms" ? formatTermContentForEditing(item.content ?? "") : (item.content ?? ""));
+    setEditContent(item.content ?? "");
     setEditSubHref(item.subHref ?? subHref);
     setEditBrandStructured(
       safeTab === "brands"
@@ -1022,8 +1016,6 @@ function PublishCenterPageInner() {
     const composedEditContent =
       safeTab === "brands"
           ? buildBrandStructuredHtml(editBrandStructured)
-          : safeTab === "terms"
-            ? normalizeTermContent(editContent)
           : safeTab === "standards"
             ? editContent.trim()
             : safeTab === "industry-data"
@@ -1140,15 +1132,16 @@ function PublishCenterPageInner() {
       <>
         {currentTab === "terms" && (
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <label className="block text-sm text-muted">词条正文</label>
-              <p className="text-xs text-muted">可直接按普通文本输入，系统会自动识别“一、二、三”这类标题并整理为词条结构。</p>
-            </div>
-            <textarea
-              className="w-full min-h-[320px] rounded-2xl border border-border bg-surface px-3 py-3 text-sm leading-7 text-primary"
+            <label className="block text-sm text-muted">词条正文</label>
+            <RichEditor
               value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder={"示例：\n一、概述\n全屋整木定制是在整木定制基础上，实现全空间覆盖的系统化木作解决方案。\n\n二、基本信息\n覆盖范围：全屋\n核心：整体设计"}
+              onChange={setContent}
+              onImportedTitle={handleImportedPublishTitle}
+              minHeight={360}
+              placeholder="支持标题、列表、引用、链接、图片、表格以及 DOCX/TXT 文档导入。"
+              allowClipboardImagePaste={canPasteImages}
+              toolbarIcons
+              statusResetKey={`member-publish-terms:${safeTab}:${publishEditorStatusVersion}`}
             />
           </div>
         )}
@@ -1852,20 +1845,7 @@ function PublishCenterPageInner() {
                 )}
               </>
             )}
-            {safeTab === "terms" ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <label className="block text-sm text-muted">词条正文</label>
-                  <p className="text-xs text-muted">可直接按普通文本修改，系统会自动整理结构。</p>
-                </div>
-                <textarea
-                  className="w-full min-h-[320px] rounded-2xl border border-border bg-surface px-3 py-3 text-sm leading-7 text-primary"
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  placeholder={"示例：\n一、概述\n全屋整木定制是在整木定制基础上，实现全空间覆盖的系统化木作解决方案。\n\n二、基本信息\n覆盖范围：全屋\n核心：整体设计"}
-                />
-              </div>
-            ) : safeTab === "brands" ? (
+            {safeTab === "brands" ? (
               <>
                 <label className="block text-sm text-muted">品牌结构化内容</label>
                 <BrandStructuredEditor value={editBrandStructured} onChange={setEditBrandStructured} />

@@ -13,7 +13,6 @@ import { resolveTagSlugs } from "@/lib/tag-suggest";
 import { generateUniqueArticleSlug } from "@/lib/slug";
 import { isContentReviewRequired } from "@/lib/app-settings";
 import { normalizeRichTextField } from "@/lib/brand-content";
-import { isValidTermStructuredContent, normalizeTermContent } from "@/lib/term-structured";
 import { findDuplicateArticleByTitle, normalizeArticleTitle } from "@/lib/article-title";
 import { formatKeywordCsv, syncArticleKeywords } from "@/lib/news-keywords-v2";
 import {
@@ -176,18 +175,7 @@ export async function POST(request: NextRequest) {
   if (existingTitle) {
     return NextResponse.json({ error: "标题已存在，请更换一个新的标题" }, { status: 400 });
   }
-  const isDictionary =
-    categoryHrefTrim.startsWith("/dictionary") || (normalizedSubHref?.startsWith("/dictionary") ?? false);
-  const normalizedContent = isDictionary
-    ? typeof content === "string"
-      ? normalizeTermContent(content)
-      : ""
-    : normalizeRichTextField(content) ?? "";
-  if (isDictionary) {
-    if (!isValidTermStructuredContent(normalizedContent)) {
-      return NextResponse.json({ error: "词库内容必须按固定小标题分节格式提交" }, { status: 400 });
-    }
-  }
+  const normalizedContent = normalizeRichTextField(content) ?? "";
   const dirtyTextError = buildDirtyTextErrorMessage([
     { label: "标题", value: normalizedTitle },
     { label: "摘要", value: typeof excerpt === "string" ? excerpt.trim() : null },
