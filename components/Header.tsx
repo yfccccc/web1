@@ -225,7 +225,7 @@ export function Header({
             </span>
           </Link>
 
-          <nav className="hidden items-center gap-1.5 overflow-x-auto md:flex md:overflow-visible" aria-label="主导航">
+          <nav className="hidden items-center gap-1.5 overflow-x-auto lg:flex lg:overflow-visible" aria-label="主导航">
             {desktopNavItems.map(({ href, label, external, subcategories, featured }) => {
               const active = !external && isActivePath(pathname, href);
 
@@ -274,11 +274,11 @@ export function Header({
             })}
           </nav>
 
-          <div className="hidden items-center gap-2 md:flex">
+          <div className="hidden items-center gap-2 lg:flex">
             <AccountButton me={me} memberHref={memberHref} onLogout={handleLogout} />
           </div>
 
-          <div className="flex items-center gap-2 md:hidden">
+          <div className="flex items-center gap-2 lg:hidden">
             {featuredNav ? (
               <Link
                 href={featuredNav.href}
@@ -322,7 +322,7 @@ export function Header({
       </header>
 
       {mobileMenuOpen ? (
-        <div className="fixed inset-0 z-[70] md:hidden">
+        <div className="fixed inset-0 z-[70] lg:hidden">
           <button
             type="button"
             aria-label="关闭导航菜单"
