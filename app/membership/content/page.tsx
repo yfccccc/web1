@@ -210,7 +210,7 @@ const EMPTY_SETTINGS: SiteSettings = {
 };
 
 const PRIMARY_ACTIONS = [
-  { href: "/membership/content/publish?tab=articles", label: "发布资讯", desc: "发布企业资讯、词库或标准相关内容" },
+  { href: "/membership/content/publish?tab=articles", label: "发布资讯", desc: "按当前会员权限发布内容" },
   { href: "/membership/content/gallery", label: "管理图库", desc: "上传案例图、工艺图和空间图" },
   { href: "/membership/content/submissions", label: "内容记录", desc: "查看草稿、待审核、已通过和已退回内容" },
   { href: "/membership/profile", label: "企业资料", desc: "维护关于品牌、品牌定位和 Logo" },
@@ -784,7 +784,7 @@ export default function MemberContentPage() {
               {data.member.type === "personal"
                 ? "你可以发布少量资讯、参与词库贡献和标准共建。完成企业认证后，可升级为企业基础会员，获得企业主页配置、图库上传和更多企业展示能力。"
                 : data.member.type === "enterprise_basic"
-                  ? "你可以维护企业资料、配置企业主页、上传图库并发布企业资讯。升级为企业VIP会员后，可获得 SEO 设置、推荐位、子账号和更高内容额度。"
+                  ? "你可以维护企业资料、配置企业主页，每年发布 5 篇企业动态并上传 5 张图库图片。升级为企业VIP会员后，可获得 SEO 设置、推荐位、子账号和更高内容额度。"
                   : "你已拥有企业主页、内容发布、图库上传、SEO 设置、推荐内容、子账号和高级展示能力。"}
             </p>
           </div>

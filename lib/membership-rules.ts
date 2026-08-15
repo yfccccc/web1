@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { APP_SETTING_KEYS } from "@/lib/app-settings";
+import { ENTERPRISE_BASIC_ARTICLE_LIMIT, ENTERPRISE_BASIC_GALLERY_LIMIT } from "@/lib/enterprise-basic-limits";
 
 export type LegacyMemberType = "enterprise_basic" | "personal" | "enterprise_advanced";
 
@@ -37,9 +38,9 @@ const DEFAULT_MEMBERSHIP_RULES: MembershipRulesMap = {
     memberType: "enterprise_basic",
     label: "企业基础会员",
     siteLabel: "企业基础会员",
-    publishCategoryHrefs: [...ALL_PUBLISH_CATEGORIES],
-    newsPublishLimit: 5,
-    galleryUploadLimit: 50,
+    publishCategoryHrefs: ["/news"],
+    newsPublishLimit: ENTERPRISE_BASIC_ARTICLE_LIMIT,
+    galleryUploadLimit: ENTERPRISE_BASIC_GALLERY_LIMIT,
     canSubmitStandardFeedback: true,
     canLinkStandards: true,
     canLinkTerms: true,
@@ -138,14 +139,21 @@ function normalizeMembershipRule(
   fallback: MembershipRule
 ): MembershipRule {
   const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const isEnterpriseBasic = memberType === "enterprise_basic";
   return {
     memberType,
     label: typeof source.label === "string" && source.label.trim() ? source.label.trim() : fallback.label,
     siteLabel:
       typeof source.siteLabel === "string" && source.siteLabel.trim() ? source.siteLabel.trim() : fallback.siteLabel,
-    publishCategoryHrefs: normalizePublishCategoryHrefs(source.publishCategoryHrefs, fallback.publishCategoryHrefs),
-    newsPublishLimit: parseNumber(source.newsPublishLimit, fallback.newsPublishLimit),
-    galleryUploadLimit: parseNumber(source.galleryUploadLimit, fallback.galleryUploadLimit),
+    publishCategoryHrefs: isEnterpriseBasic
+      ? ["/news"]
+      : normalizePublishCategoryHrefs(source.publishCategoryHrefs, fallback.publishCategoryHrefs),
+    newsPublishLimit: isEnterpriseBasic
+      ? ENTERPRISE_BASIC_ARTICLE_LIMIT
+      : parseNumber(source.newsPublishLimit, fallback.newsPublishLimit),
+    galleryUploadLimit: isEnterpriseBasic
+      ? ENTERPRISE_BASIC_GALLERY_LIMIT
+      : parseNumber(source.galleryUploadLimit, fallback.galleryUploadLimit),
     canSubmitStandardFeedback: parseBoolean(source.canSubmitStandardFeedback, fallback.canSubmitStandardFeedback),
     canLinkStandards: parseBoolean(source.canLinkStandards, fallback.canLinkStandards),
     canLinkTerms: parseBoolean(source.canLinkTerms, fallback.canLinkTerms),

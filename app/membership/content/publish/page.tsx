@@ -406,6 +406,13 @@ function PublishCenterPageInner() {
     () => allCategoryAccess.filter((category) => category.enabled),
     [allCategoryAccess]
   );
+  const visibleCategoryAccess = useMemo(
+    () =>
+      memberType === "enterprise_basic"
+        ? allCategoryAccess.filter((category) => category.href === "/news")
+        : allCategoryAccess,
+    [allCategoryAccess, memberType]
+  );
   const allowedTabs = useMemo(() => enabledCategoryAccess.map((x) => tabFromHref(x.href)), [enabledCategoryAccess]);
   const safeTab = useMemo(() => (allowedTabs.includes(tab) ? tab : allowedTabs[0] ?? "articles"), [tab, allowedTabs]);
   const selectedTabDef = useMemo(() => CONTENT_TAB_DEFS.find((x) => x.key === safeTab) ?? CONTENT_TAB_DEFS[0], [safeTab]);
@@ -1371,7 +1378,7 @@ function PublishCenterPageInner() {
         <aside className="rounded-[28px] border border-border bg-surface-elevated p-4 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted">发布栏目</p>
           <ul className="space-y-1">
-            {allCategoryAccess.map((cat) => {
+            {visibleCategoryAccess.map((cat) => {
               const catTab = tabFromHref(cat.href);
               const active = catTab === safeTab;
               return (
@@ -1402,6 +1409,11 @@ function PublishCenterPageInner() {
               );
             })}
           </ul>
+          {memberType === "enterprise_basic" ? (
+            <div className="mt-3 rounded-2xl border border-border bg-surface px-3 py-3 text-xs leading-5 text-muted">
+              发布栏目：<span className="text-primary">整木资讯 / 企业动态</span>
+            </div>
+          ) : null}
             <div className="mt-3 rounded-2xl border border-border bg-surface px-3 py-3 text-xs text-muted">
               当前栏目：<span className="text-primary">{selectedTabDef.label}</span>
             </div>

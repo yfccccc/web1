@@ -6,6 +6,7 @@ import { writeOperationLog } from "@/lib/operation-log";
 import { normalizeRichTextField } from "@/lib/brand-content";
 import { findDuplicateArticleByTitle, normalizeArticleTitle } from "@/lib/article-title";
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
+import { canMemberUseArticleLocation } from "@/lib/enterprise-basic-limits";
 
 export const dynamic = "force-dynamic";
 
@@ -28,9 +29,13 @@ export async function POST(
       coverImage: true,
       categoryHref: true,
       subHref: true,
+      authorMemberId: true,
     },
   });
   if (!article) return NextResponse.json({ error: "资讯不存在" }, { status: 404 });
+  if (article.authorMemberId !== session.sub) {
+    return NextResponse.json({ error: "仅可提交自己资讯的修改申请" }, { status: 403 });
+  }
 
   const body = await request.json().catch(() => ({}));
   const patch = buildArticlePatchData({
@@ -46,6 +51,12 @@ export async function POST(
     relatedStandardIds: body.relatedStandardIds,
     relatedBrandIds: body.relatedBrandIds,
   });
+
+  const nextCategoryHref = patch.patchCategoryHref ?? article.categoryHref;
+  const nextSubHref = patch.patchSubHref ?? article.subHref;
+  if (!canMemberUseArticleLocation(session.memberType, nextCategoryHref, nextSubHref)) {
+    return NextResponse.json({ error: "企业基础会员仅可保留文章在整木资讯 / 企业动态" }, { status: 403 });
+  }
 
   const hasPatch = Object.values(patch).some((v) => v !== null && String(v).trim() !== "");
   if (!hasPatch) {

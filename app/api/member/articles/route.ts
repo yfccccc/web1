@@ -23,6 +23,7 @@ import {
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
 import { validateInternalLinks } from "@/lib/article-links";
 import { revalidateBuyingArticlePaths } from "@/lib/buying-summary";
+import { canMemberUseArticleLocation, isAnnualLimitReached } from "@/lib/enterprise-basic-limits";
 
 const MEMBER_CONTENT_STATUSES = new Set(["draft", "pending", "approved", "rejected"]);
 
@@ -117,6 +118,10 @@ export async function POST(request: NextRequest) {
 
   const categoryHrefTrim =
     typeof categoryHref === "string" ? categoryHref.trim() : "";
+  const rawSubHref = typeof subHref === "string" ? subHref.trim() : "";
+  if (!canMemberUseArticleLocation(session.memberType, categoryHrefTrim, rawSubHref)) {
+    return NextResponse.json({ error: "企业基础会员仅可发布到整木资讯 / 企业动态" }, { status: 403 });
+  }
   if (!MEMBER_ALLOWED_CATEGORY_HREFS.has(categoryHrefTrim)) {
     return NextResponse.json({ error: "栏目非法或不支持投稿" }, { status: 400 });
   }
@@ -127,7 +132,6 @@ export async function POST(request: NextRequest) {
   }
 
   const categoryDef = MEMBER_PUBLISH_CATEGORY_OPTIONS.find((item) => item.href === categoryHrefTrim);
-  const rawSubHref = typeof subHref === "string" ? subHref.trim() : "";
   const normalizedSyncToMainSite = syncToMainSite === true;
   const memberEnterprise = await prisma.enterprise.findUnique({
     where: { memberId: session.sub },
@@ -155,7 +159,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `${membershipRule.label}当前未开通该子栏目投稿权限` }, { status: 403 });
     }
 
-    if (subcategoryAccess.annualLimit != null && subcategoryAccess.usedCount >= subcategoryAccess.annualLimit) {
+    if (isAnnualLimitReached(subcategoryAccess.usedCount, subcategoryAccess.annualLimit)) {
       return NextResponse.json(
         { error: `当前子栏目年度发布额度已用完（${subcategoryAccess.annualLimit}篇）` },
         { status: 400 }
@@ -163,7 +167,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  if (categoryAccess.annualLimit != null && categoryAccess.usedCount >= categoryAccess.annualLimit) {
+  if (isAnnualLimitReached(categoryAccess.usedCount, categoryAccess.annualLimit)) {
     return NextResponse.json({ error: `当前栏目年度发布额度已用完（${categoryAccess.annualLimit}篇）` }, { status: 400 });
   }
 

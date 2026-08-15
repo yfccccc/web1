@@ -57,7 +57,7 @@ export default async function MembershipPage() {
             <h2 className="font-serif text-lg font-semibold text-primary">企业基础会员</h2>
             <ul className="mt-3 space-y-2 text-sm text-muted">
               <li>支持企业资料编辑、企业主页配置与前台企业页展示</li>
-              <li>支持企业资讯发布、图库上传、词库贡献与标准共建（默认待审核）</li>
+              <li>仅可发布企业动态，默认 5 篇/年；图库上传默认 5 张/年（默认待审核）</li>
               <li>适合已完成企业认证的入驻企业</li>
             </ul>
           </article>

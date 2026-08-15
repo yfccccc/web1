@@ -6,6 +6,11 @@ import { writeOperationLog } from "@/lib/operation-log";
 import { isContentReviewRequired } from "@/lib/app-settings";
 import { normalizeGalleryCategory } from "@/lib/gallery-taxonomy";
 import { getEffectiveMemberAccessForMember } from "@/lib/member-access-resolver";
+import {
+  ENTERPRISE_BASIC_GALLERY_LIMIT,
+  getCalendarYearRange,
+  isAnnualLimitReached,
+} from "@/lib/enterprise-basic-limits";
 
 const TITLE_MAX = 24;
 const ALT_MAX = 100;
@@ -43,11 +48,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `${membershipRule.label}当前不支持企业图库上传` }, { status: 403 });
   }
 
-  if (membershipRule.galleryUploadLimit != null) {
-    const count = await prisma.galleryImage.count({ where: { authorMemberId: session.sub } });
-    if (count >= membershipRule.galleryUploadLimit) {
+  const galleryLimit =
+    session.memberType === "enterprise_basic" ? ENTERPRISE_BASIC_GALLERY_LIMIT : membershipRule.galleryUploadLimit;
+  if (galleryLimit != null) {
+    const where =
+      session.memberType === "enterprise_basic"
+        ? (() => {
+            const { start, end } = getCalendarYearRange();
+            return { authorMemberId: session.sub, createdAt: { gte: start, lt: end } };
+          })()
+        : { authorMemberId: session.sub };
+    const count = await prisma.galleryImage.count({ where });
+    if (isAnnualLimitReached(count, galleryLimit)) {
       return NextResponse.json(
-        { error: `${membershipRule.label}图片数量已达上限（${membershipRule.galleryUploadLimit}张）` },
+        { error: `${membershipRule.label}本年度图库上传额度已用完（${galleryLimit}张）` },
         { status: 400 }
       );
     }

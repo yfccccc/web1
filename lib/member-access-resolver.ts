@@ -2,6 +2,10 @@ import { MEMBER_PUBLISH_CATEGORY_OPTIONS } from "@/lib/content-taxonomy";
 import { getMemberGrantSettings, type GrantFeatureKey, type MemberGrantSettings } from "@/lib/member-grants";
 import { getMembershipRule, type LegacyMemberType, type MembershipRule } from "@/lib/membership-rules";
 import { prisma } from "@/lib/prisma";
+import {
+  ENTERPRISE_BASIC_ARTICLE_CATEGORY_HREF,
+  ENTERPRISE_BASIC_ARTICLE_SUB_HREF,
+} from "@/lib/enterprise-basic-limits";
 
 export type EffectiveMemberFeatureAccess = Record<GrantFeatureKey, boolean>;
 
@@ -128,7 +132,10 @@ export function buildEffectiveMemberAccessFromSources(
   const grantActive = isGrantActive(grants, new Date());
 
   const categories = MEMBER_PUBLISH_CATEGORY_OPTIONS.map((category) => {
-    const defaultCategoryEnabled = membershipRule.publishCategoryHrefs.includes(category.href);
+    const isEnterpriseBasic = memberType === "enterprise_basic";
+    const defaultCategoryEnabled = isEnterpriseBasic
+      ? category.href === ENTERPRISE_BASIC_ARTICLE_CATEGORY_HREF
+      : membershipRule.publishCategoryHrefs.includes(category.href);
     const defaultCategoryLimit = getDefaultCategoryLimit(membershipRule, category.href);
     const categoryGrant = grants.categories[category.href];
     const categoryEnabledOverride = grantActive ? categoryGrant?.enabled : null;
@@ -136,9 +143,12 @@ export function buildEffectiveMemberAccessFromSources(
 
     const subcategories = category.subs.map((sub) => {
       const subGrant = categoryGrant?.subcategories[sub.href];
-      const defaultSubEnabled = defaultCategoryEnabled;
-      const enabled =
-        typeof (grantActive ? subGrant?.enabled : null) === "boolean"
+      const defaultSubEnabled = isEnterpriseBasic
+        ? category.href === ENTERPRISE_BASIC_ARTICLE_CATEGORY_HREF && sub.href === ENTERPRISE_BASIC_ARTICLE_SUB_HREF
+        : defaultCategoryEnabled;
+      const enabled = isEnterpriseBasic
+        ? defaultSubEnabled
+        : typeof (grantActive ? subGrant?.enabled : null) === "boolean"
           ? Boolean(subGrant?.enabled)
           : defaultSubEnabled;
       const annualLimit = (grantActive ? subGrant?.annualLimit : null) ?? null;
@@ -154,8 +164,9 @@ export function buildEffectiveMemberAccessFromSources(
     });
 
     const hasEnabledSubcategory = subcategories.some((sub) => sub.enabled);
-    const enabled =
-      typeof categoryEnabledOverride === "boolean"
+    const enabled = isEnterpriseBasic
+      ? defaultCategoryEnabled
+      : typeof categoryEnabledOverride === "boolean"
         ? categoryEnabledOverride || hasEnabledSubcategory
         : defaultCategoryEnabled || hasEnabledSubcategory;
     const annualLimit = categoryLimitOverride ?? defaultCategoryLimit;

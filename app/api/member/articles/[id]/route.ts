@@ -5,6 +5,7 @@ import { normalizeRichTextField } from "@/lib/brand-content";
 import { findDuplicateArticleByTitle, normalizeArticleTitle } from "@/lib/article-title";
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
 import { revalidateBuyingArticlePaths } from "@/lib/buying-summary";
+import { canMemberUseArticleLocation } from "@/lib/enterprise-basic-limits";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,11 @@ export async function PATCH(
   }
 
   const body = await request.json().catch(() => ({}));
+  const nextCategoryHref = typeof body.categoryHref === "string" ? body.categoryHref.trim() || null : article.categoryHref;
+  const nextSubHref = typeof body.subHref === "string" ? body.subHref.trim() || null : article.subHref;
+  if (!canMemberUseArticleLocation(session.memberType, nextCategoryHref, nextSubHref)) {
+    return NextResponse.json({ error: "企业基础会员仅可保留文章在整木资讯 / 企业动态" }, { status: 403 });
+  }
   const data: Record<string, unknown> = {};
   if (typeof body.title === "string") data.title = normalizeArticleTitle(body.title);
   if (typeof body.excerpt === "string") data.excerpt = body.excerpt.trim() || null;
