@@ -5,7 +5,7 @@ import { normalizeRichTextField } from "@/lib/brand-content";
 import { findDuplicateArticleByTitle, normalizeArticleTitle } from "@/lib/article-title";
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
 import { revalidateBuyingArticlePaths } from "@/lib/buying-summary";
-import { canMemberUseArticleLocation } from "@/lib/enterprise-basic-limits";
+import { canMemberUseArticleLocation, getEffectiveMemberAccessForMember } from "@/lib/member-access-resolver";
 
 export const dynamic = "force-dynamic";
 
@@ -43,11 +43,12 @@ export async function PATCH(
     return NextResponse.json({ error: "当前账号没有直接修改权限，请提交修改申请" }, { status: 403 });
   }
 
+  const memberAccess = await getEffectiveMemberAccessForMember(session.sub, session.memberType);
   const body = await request.json().catch(() => ({}));
   const nextCategoryHref = typeof body.categoryHref === "string" ? body.categoryHref.trim() || null : article.categoryHref;
   const nextSubHref = typeof body.subHref === "string" ? body.subHref.trim() || null : article.subHref;
-  if (!canMemberUseArticleLocation(session.memberType, nextCategoryHref, nextSubHref)) {
-    return NextResponse.json({ error: "企业基础会员仅可保留文章在整木资讯 / 企业动态" }, { status: 403 });
+  if (!canMemberUseArticleLocation(memberAccess, nextCategoryHref, nextSubHref)) {
+    return NextResponse.json({ error: "当前账号未开通该栏目或子栏目投稿权限" }, { status: 403 });
   }
   const data: Record<string, unknown> = {};
   if (typeof body.title === "string") data.title = normalizeArticleTitle(body.title);

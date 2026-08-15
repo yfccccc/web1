@@ -146,11 +146,8 @@ export function buildEffectiveMemberAccessFromSources(
       const defaultSubEnabled = isEnterpriseBasic
         ? category.href === ENTERPRISE_BASIC_ARTICLE_CATEGORY_HREF && sub.href === ENTERPRISE_BASIC_ARTICLE_SUB_HREF
         : defaultCategoryEnabled;
-      const enabled = isEnterpriseBasic
-        ? defaultSubEnabled
-        : typeof (grantActive ? subGrant?.enabled : null) === "boolean"
-          ? Boolean(subGrant?.enabled)
-          : defaultSubEnabled;
+      const subEnabledOverride = grantActive ? subGrant?.enabled : null;
+      const enabled = typeof subEnabledOverride === "boolean" ? subEnabledOverride : defaultSubEnabled;
       const annualLimit = (grantActive ? subGrant?.annualLimit : null) ?? null;
       const usedCount = usageMaps.subcategoryCounts.get(`${category.href}::${sub.href}`) ?? 0;
       return {
@@ -165,7 +162,9 @@ export function buildEffectiveMemberAccessFromSources(
 
     const hasEnabledSubcategory = subcategories.some((sub) => sub.enabled);
     const enabled = isEnterpriseBasic
-      ? defaultCategoryEnabled
+      ? typeof categoryEnabledOverride === "boolean"
+        ? categoryEnabledOverride
+        : defaultCategoryEnabled || hasEnabledSubcategory
       : typeof categoryEnabledOverride === "boolean"
         ? categoryEnabledOverride || hasEnabledSubcategory
         : defaultCategoryEnabled || hasEnabledSubcategory;
@@ -232,4 +231,16 @@ export function findEffectiveSubcategoryAccess(
   if (!subHref) return null;
   const category = findEffectiveCategoryAccess(access, categoryHref);
   return category?.subcategories.find((sub) => sub.href === subHref) ?? null;
+}
+
+export function canMemberUseArticleLocation(
+  access: EffectiveMemberAccess,
+  categoryHref: string | null | undefined,
+  subHref: string | null | undefined
+) {
+  if (!categoryHref) return false;
+  const category = findEffectiveCategoryAccess(access, categoryHref);
+  if (!category?.enabled) return false;
+  if (category.subcategories.length === 0) return !subHref;
+  return Boolean(findEffectiveSubcategoryAccess(access, categoryHref, subHref)?.enabled);
 }

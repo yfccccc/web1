@@ -16,6 +16,7 @@ import { normalizeRichTextField } from "@/lib/brand-content";
 import { findDuplicateArticleByTitle, normalizeArticleTitle } from "@/lib/article-title";
 import { formatKeywordCsv, syncArticleKeywords } from "@/lib/news-keywords-v2";
 import {
+  canMemberUseArticleLocation,
   findEffectiveCategoryAccess,
   findEffectiveSubcategoryAccess,
   getEffectiveMemberAccessForMember,
@@ -23,7 +24,7 @@ import {
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
 import { validateInternalLinks } from "@/lib/article-links";
 import { revalidateBuyingArticlePaths } from "@/lib/buying-summary";
-import { canMemberUseArticleLocation, isAnnualLimitReached } from "@/lib/enterprise-basic-limits";
+import { isAnnualLimitReached } from "@/lib/enterprise-basic-limits";
 
 const MEMBER_CONTENT_STATUSES = new Set(["draft", "pending", "approved", "rejected"]);
 
@@ -119,16 +120,8 @@ export async function POST(request: NextRequest) {
   const categoryHrefTrim =
     typeof categoryHref === "string" ? categoryHref.trim() : "";
   const rawSubHref = typeof subHref === "string" ? subHref.trim() : "";
-  if (!canMemberUseArticleLocation(session.memberType, categoryHrefTrim, rawSubHref)) {
-    return NextResponse.json({ error: "企业基础会员仅可发布到整木资讯 / 企业动态" }, { status: 403 });
-  }
   if (!MEMBER_ALLOWED_CATEGORY_HREFS.has(categoryHrefTrim)) {
     return NextResponse.json({ error: "栏目非法或不支持投稿" }, { status: 400 });
-  }
-
-  const categoryAccess = findEffectiveCategoryAccess(memberAccess, categoryHrefTrim);
-  if (!categoryAccess?.enabled) {
-    return NextResponse.json({ error: `${membershipRule.label}当前未开通该栏目投稿权限` }, { status: 403 });
   }
 
   const categoryDef = MEMBER_PUBLISH_CATEGORY_OPTIONS.find((item) => item.href === categoryHrefTrim);
@@ -153,11 +146,22 @@ export async function POST(request: NextRequest) {
     if (!subcategoryExists) {
       return NextResponse.json({ error: "子栏目非法或不支持投稿" }, { status: 400 });
     }
+  } else if (normalizedSubHref) {
+    return NextResponse.json({ error: "当前栏目不支持子栏目" }, { status: 400 });
+  }
 
+  if (!canMemberUseArticleLocation(memberAccess, categoryHrefTrim, normalizedSubHref)) {
+    return NextResponse.json({ error: `${membershipRule.label}当前未开通该栏目或子栏目投稿权限` }, { status: 403 });
+  }
+
+  const categoryAccess = findEffectiveCategoryAccess(memberAccess, categoryHrefTrim);
+  if (!categoryAccess) {
+    return NextResponse.json({ error: "栏目非法或不支持投稿" }, { status: 400 });
+  }
+
+  if (categoryDef && categoryDef.subs.length > 0) {
     const subcategoryAccess = findEffectiveSubcategoryAccess(memberAccess, categoryHrefTrim, normalizedSubHref);
-    if (!subcategoryAccess?.enabled) {
-      return NextResponse.json({ error: `${membershipRule.label}当前未开通该子栏目投稿权限` }, { status: 403 });
-    }
+    if (!subcategoryAccess) return NextResponse.json({ error: "子栏目非法或不支持投稿" }, { status: 400 });
 
     if (isAnnualLimitReached(subcategoryAccess.usedCount, subcategoryAccess.annualLimit)) {
       return NextResponse.json(

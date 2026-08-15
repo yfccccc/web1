@@ -167,7 +167,7 @@ export default function MembershipContentNewsPage() {
       content: content.trim(),
       subHref,
       categoryHref: "/news",
-      syncToMainSite: true,
+      syncToMainSite: subHref === "/news/enterprise",
     };
 
     const dirtyTextError = buildDirtyTextErrorMessage([

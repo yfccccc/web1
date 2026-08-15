@@ -100,6 +100,20 @@ export async function GET() {
     },
     authorization: {
       year: currentYear,
+      publishingCategories: memberAccess.categories.map((category) => ({
+        href: category.href,
+        label: category.label,
+        enabled: category.enabled,
+        annualLimit: category.annualLimit,
+        remainingCount: category.remainingCount,
+        subcategories: category.subcategories.map((sub) => ({
+          href: sub.href,
+          label: sub.label,
+          enabled: sub.enabled,
+          annualLimit: sub.annualLimit,
+          remainingCount: sub.remainingCount,
+        })),
+      })),
       news: newsCategory
         ? {
             enabled: newsCategory.enabled,

@@ -18,6 +18,20 @@ type DashboardData = {
   };
   authorization: {
     year: number;
+    publishingCategories: Array<{
+      href: string;
+      label: string;
+      enabled: boolean;
+      annualLimit: number | null;
+      remainingCount: number | null;
+      subcategories: Array<{
+        href: string;
+        label: string;
+        enabled: boolean;
+        annualLimit: number | null;
+        remainingCount: number | null;
+      }>;
+    }>;
     news: { enabled: boolean; annualLimit: number | null; usedCount: number; remainingCount: number | null };
     gallery: { enabled: boolean; annualLimit: number | null; usedCount: number; remainingCount: number | null };
     standardFeedback: { enabled: boolean; usedCount: number };
@@ -738,6 +752,17 @@ export default function MemberContentPage() {
       ? "不限"
       : `${data.authorization.gallery.remainingCount ?? 0}/${data.authorization.gallery.annualLimit}`
     : "未开通";
+  const effectivePublishingLabels = data.authorization.publishingCategories.flatMap((category) => {
+    if (!category.enabled) return [];
+    if (category.subcategories.length === 0) return [category.label];
+    return category.subcategories.filter((sub) => sub.enabled).map((sub) => `${category.label} / ${sub.label}`);
+  });
+  const enterpriseBasicRightsCopy =
+    effectivePublishingLabels.length === 1 &&
+    effectivePublishingLabels[0] === "整木资讯 / 企业动态" &&
+    data.authorization.news.annualLimit === 5
+      ? "你可以维护企业资料、配置企业主页，每年发布 5 篇企业动态并上传 5 张图库图片。升级为企业VIP会员后，可获得 SEO 设置、推荐位、子账号和更高内容额度。"
+      : `你可以维护企业资料、配置企业主页并上传图库。当前已开通${effectivePublishingLabels.join("、") || "专项"}发布权限，资讯总额度为${data.authorization.news.annualLimit == null ? "不限" : `${data.authorization.news.annualLimit} 篇/年`}，具体子栏目额度以发布中心为准；图库仍为 5 张/年。`;
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 px-3 py-6 sm:space-y-6 sm:px-4 sm:py-12">
@@ -784,7 +809,7 @@ export default function MemberContentPage() {
               {data.member.type === "personal"
                 ? "你可以发布少量资讯、参与词库贡献和标准共建。完成企业认证后，可升级为企业基础会员，获得企业主页配置、图库上传和更多企业展示能力。"
                 : data.member.type === "enterprise_basic"
-                  ? "你可以维护企业资料、配置企业主页，每年发布 5 篇企业动态并上传 5 张图库图片。升级为企业VIP会员后，可获得 SEO 设置、推荐位、子账号和更高内容额度。"
+                  ? enterpriseBasicRightsCopy
                   : "你已拥有企业主页、内容发布、图库上传、SEO 设置、推荐内容、子账号和高级展示能力。"}
             </p>
           </div>

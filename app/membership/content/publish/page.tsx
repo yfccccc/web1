@@ -406,30 +406,50 @@ function PublishCenterPageInner() {
     () => allCategoryAccess.filter((category) => category.enabled),
     [allCategoryAccess]
   );
-  const visibleCategoryAccess = useMemo(
+  const selectableCategoryAccess = useMemo(
     () =>
       memberType === "enterprise_basic"
-        ? allCategoryAccess.filter((category) => category.href === "/news")
-        : allCategoryAccess,
-    [allCategoryAccess, memberType]
+        ? enabledCategoryAccess.filter(
+            (category) => category.subcategories.length === 0 || category.subcategories.some((sub) => sub.enabled)
+          )
+        : enabledCategoryAccess,
+    [enabledCategoryAccess, memberType]
   );
-  const allowedTabs = useMemo(() => enabledCategoryAccess.map((x) => tabFromHref(x.href)), [enabledCategoryAccess]);
+  const visibleCategoryAccess = useMemo(
+    () => (memberType === "enterprise_basic" ? selectableCategoryAccess : allCategoryAccess),
+    [allCategoryAccess, memberType, selectableCategoryAccess]
+  );
+  const allowedTabs = useMemo(() => selectableCategoryAccess.map((x) => tabFromHref(x.href)), [selectableCategoryAccess]);
   const safeTab = useMemo(() => (allowedTabs.includes(tab) ? tab : allowedTabs[0] ?? "articles"), [tab, allowedTabs]);
   const selectedTabDef = useMemo(() => CONTENT_TAB_DEFS.find((x) => x.key === safeTab) ?? CONTENT_TAB_DEFS[0], [safeTab]);
   const selectedCategoryAccess = useMemo(
-    () => enabledCategoryAccess.find((x) => x.href === selectedTabDef.href) ?? enabledCategoryAccess[0] ?? null,
-    [enabledCategoryAccess, selectedTabDef.href]
+    () => selectableCategoryAccess.find((x) => x.href === selectedTabDef.href) ?? selectableCategoryAccess[0] ?? null,
+    [selectableCategoryAccess, selectedTabDef.href]
   );
   const selectedCategory = useMemo(
     () => MEMBER_PUBLISH_CATEGORY_OPTIONS.find((x) => x.href === selectedCategoryAccess?.href) ?? null,
     [selectedCategoryAccess]
   );
   const subOptions = useMemo(() => selectedCategoryAccess?.subcategories ?? [], [selectedCategoryAccess]);
+  const visibleSubOptions = useMemo(
+    () => (memberType === "enterprise_basic" ? subOptions.filter((item) => item.enabled) : subOptions),
+    [memberType, subOptions]
+  );
   const activeSubAccess = useMemo(
     () => subOptions.find((item) => item.href === subHref) ?? null,
     [subOptions, subHref]
   );
   const enabledSubcategoryCount = useMemo(() => subOptions.filter((item) => item.enabled).length, [subOptions]);
+  const enterpriseBasicPublishSummary = useMemo(
+    () =>
+      selectableCategoryAccess
+        .flatMap((category) => {
+          if (category.subcategories.length === 0) return [category.label];
+          return category.subcategories.filter((sub) => sub.enabled).map((sub) => `${category.label} / ${sub.label}`);
+        })
+        .join("、") || "未开通",
+    [selectableCategoryAccess]
+  );
   const selectedCategoryQuotaLabel = useMemo(
     () => (selectedCategoryAccess ? formatQuota(selectedCategoryAccess.annualLimit, selectedCategoryAccess.remainingCount) : "未开通"),
     [selectedCategoryAccess]
@@ -1411,7 +1431,7 @@ function PublishCenterPageInner() {
           </ul>
           {memberType === "enterprise_basic" ? (
             <div className="mt-3 rounded-2xl border border-border bg-surface px-3 py-3 text-xs leading-5 text-muted">
-              发布栏目：<span className="text-primary">整木资讯 / 企业动态</span>
+              当前有效发布栏目：<span className="text-primary">{enterpriseBasicPublishSummary}</span>
             </div>
           ) : null}
             <div className="mt-3 rounded-2xl border border-border bg-surface px-3 py-3 text-xs text-muted">
@@ -1485,11 +1505,11 @@ function PublishCenterPageInner() {
             </div>
           )}
 
-          {subOptions.length > 0 && (
+          {visibleSubOptions.length > 0 && (
             <>
               <label className="block text-sm text-muted">子栏目</label>
               <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-surface p-2">
-                {subOptions.map((s) => {
+                {visibleSubOptions.map((s) => {
                   const active = effectivePublishSubHref === s.href;
                   const disabled = !s.enabled || (canLockSyncToEnterpriseNews && syncToMainSite && s.href !== ENTERPRISE_NEWS_SUBHREF);
                   return (
@@ -1774,11 +1794,11 @@ function PublishCenterPageInner() {
               value={editExcerpt}
               onChange={(e) => setEditExcerpt(e.target.value)}
             />
-            {subOptions.length > 0 && (
+            {visibleSubOptions.length > 0 && (
               <>
                 <label className="block text-sm text-muted">子栏目</label>
                 <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-surface p-2">
-                  {subOptions.map((s) => {
+                  {visibleSubOptions.map((s) => {
                     const active = editSubHref === s.href;
                     const disabled = !s.enabled;
                     return (
