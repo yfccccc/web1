@@ -15,6 +15,7 @@ export type Session = {
   memberType: MemberType;
   rankingWeight: number;
   memberTypeExpiresAt: string | null;
+  lockedUntil: Date | null;
   canPublishWithoutReview: boolean;
   canManageMembers: boolean;
   canDeleteOwnContent: boolean;
@@ -48,6 +49,7 @@ export async function getSession(): Promise<Session | null> {
         memberType: string;
         rankingWeight: number;
         memberTypeExpiresAt: Date | null;
+        lockedUntil: Date | null;
         canPublishWithoutReview: boolean;
         canManageMembers?: boolean;
         canDeleteOwnContent?: boolean;
@@ -78,6 +80,7 @@ export async function getSession(): Promise<Session | null> {
         memberType: true,
         rankingWeight: true,
         memberTypeExpiresAt: true,
+        lockedUntil: true,
         canPublishWithoutReview: true,
         canManageMembers: true,
         canDeleteOwnContent: true,
@@ -107,12 +110,14 @@ export async function getSession(): Promise<Session | null> {
         memberType: true,
         rankingWeight: true,
         memberTypeExpiresAt: true,
+        lockedUntil: true,
         canPublishWithoutReview: true,
       },
     });
   }
 
   if (!dbMember) return null;
+  if (dbMember.lockedUntil && dbMember.lockedUntil > new Date()) return null;
 
   const effective = await ensureEffectiveMemberType({
     id: dbMember.id,
@@ -154,6 +159,7 @@ export async function getSession(): Promise<Session | null> {
     memberType: asMemberType(effective.memberType),
     rankingWeight: effective.rankingWeight,
     memberTypeExpiresAt: dbMember.memberTypeExpiresAt?.toISOString() ?? null,
+    lockedUntil: dbMember.lockedUntil,
     canPublishWithoutReview: permissions.canPublishWithoutReview,
     canManageMembers: permissions.canManageMembers,
     canDeleteOwnContent: permissions.canDeleteOwnContent,

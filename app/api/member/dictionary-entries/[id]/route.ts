@@ -8,6 +8,7 @@ import { findDuplicateArticleByTitle, normalizeArticleTitle } from "@/lib/articl
 
 function canDirectlyEdit(session: NonNullable<Awaited<ReturnType<typeof getSession>>>, authorMemberId: string | null) {
   if (session.role === "SUPER_ADMIN") return true;
+  if (session.role !== "ADMIN") return false;
   if (session.canEditAllContent) return true;
   if (authorMemberId && authorMemberId === session.sub) return session.canEditOwnContent || session.canEditMemberContent;
   return session.canEditMemberContent;
@@ -42,8 +43,9 @@ export async function GET(
   });
   if (!article) return NextResponse.json({ error: "词条不存在" }, { status: 404 });
 
+  const { authorMemberId, ...memberArticle } = article;
   return NextResponse.json({
-    article,
+    article: memberArticle,
     canDirectEdit: canDirectlyEdit(session, article.authorMemberId),
   });
 }
