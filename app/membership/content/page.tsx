@@ -7,6 +7,7 @@ import { MAX_UPLOAD_IMAGE_MB, uploadImageToServer } from "@/lib/client-image";
 import { generateMemberSiteSeo, normalizeMemberSiteSeo, type MemberSiteSeoSource } from "@/lib/member-site-seo";
 import { PUBLIC_CONTACT_PHONE } from "@/lib/public-site-config";
 import { resolveUploadedImageUrl } from "@/lib/uploaded-image";
+import { DifanMonthlyNewsSummary } from "@/components/member/DifanMonthlyNewsSummary";
 
 type DashboardData = {
   member: {
@@ -52,6 +53,7 @@ type DashboardData = {
     canRecommendContent: boolean;
     canUploadGallery: boolean;
     canSubmitStandardFeedback: boolean;
+    monthlyNewsSummary: boolean;
   };
   stats: {
     articles: { total: number; pending: number; approved: number; rejected: number };
@@ -776,6 +778,7 @@ export default function MemberContentPage() {
             内容记录
           </Link>
           <AnchorLink href="#gallery-overview" label="图库概览" />
+          {data.features.monthlyNewsSummary ? <AnchorLink href="#monthly-news-summary" label="月度资讯" /> : null}
           <AnchorLink href="#site-settings" label="主页配置" />
           <AnchorLink href="#account-security" label="账号安全" />
         </div>
@@ -871,6 +874,8 @@ export default function MemberContentPage() {
         <StatCard label="标准反馈" value={data.stats.standardFeedback.total} sub={`待审核 ${data.stats.standardFeedback.pending} · 已通过 ${data.stats.standardFeedback.approved}`} />
         <StatCard label="推荐额度" value={data.authorization.recommendation.remainingCount} sub={`全年 ${data.authorization.recommendation.annualLimit} 次`} />
       </section>
+
+      {data.features.monthlyNewsSummary ? <DifanMonthlyNewsSummary /> : null}
 
       <section id="gallery-overview" className="rounded-[24px] border border-border bg-surface-elevated p-4 shadow-[0_14px_30px_rgba(15,23,42,0.06)] sm:rounded-[28px] sm:p-6 sm:shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveMemberAccessForMember } from "@/lib/member-access-resolver";
 import { getMemberSiteSettings } from "@/lib/member-site-settings";
 import { getEffectiveVerificationStatus } from "@/lib/member-verification";
+import { isDifanMonthlyNewsSummaryEnabled } from "@/lib/difan-monthly-news-summary";
 
 export async function GET() {
   const session = await getSession();
@@ -159,6 +160,7 @@ export async function GET() {
       canRecommendContent: memberAccess.features.recommendContent,
       canUploadGallery: memberAccess.features.galleryUpload,
       canSubmitStandardFeedback: memberAccess.features.standardFeedback,
+      monthlyNewsSummary: isDifanMonthlyNewsSummaryEnabled(session.sub),
     },
     stats: {
       articles,
