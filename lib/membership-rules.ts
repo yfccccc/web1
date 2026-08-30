@@ -62,7 +62,7 @@ const DEFAULT_MEMBERSHIP_RULES: MembershipRulesMap = {
     memberType: "personal",
     label: "个人会员",
     siteLabel: "个人会员",
-    publishCategoryHrefs: ["/news", "/dictionary", "/standards"],
+    publishCategoryHrefs: ["/news"],
     newsPublishLimit: 2,
     galleryUploadLimit: null,
     canSubmitStandardFeedback: true,

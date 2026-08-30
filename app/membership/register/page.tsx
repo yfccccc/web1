@@ -11,11 +11,43 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [account, setAccount] = useState("");
   const [phone, setPhone] = useState("");
+  const [smsCode, setSmsCode] = useState("");
+  const [smsMessage, setSmsMessage] = useState("");
+  const [sendingSms, setSendingSms] = useState(false);
+  const [realName, setRealName] = useState("");
+  const [identityDocumentNumber, setIdentityDocumentNumber] = useState("");
+  const [region, setRegion] = useState("");
+  const [occupationType, setOccupationType] = useState("");
+  const [companyOrOrganization, setCompanyOrOrganization] = useState("");
+  const [applicationReason, setApplicationReason] = useState("");
+  const [identityDocumentFront, setIdentityDocumentFront] = useState<File | null>(null);
+  const [identityDocumentBack, setIdentityDocumentBack] = useState<File | null>(null);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
   const [recoveryEmail, setRecoveryEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  async function sendSms() {
+    const normalizedPhone = phone.replace(/\s+/g, "").trim();
+    if (!MAINLAND_MOBILE_PATTERN.test(normalizedPhone)) {
+      setError("请先填写正确的 11 位中国大陆手机号");
+      return;
+    }
+    setSendingSms(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/sms/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: normalizedPhone, purpose: "registration" }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.code === "BLOCKED_BY_SMS_PROVIDER_CONFIGURATION" ? "短信服务尚未启用，暂不能提交注册。" : data.error ?? "验证码发送失败");
+        return;
+      }
+      setSmsMessage("验证码已发送，请在 5 分钟内完成验证。");
+    } catch { setError("网络异常，请稍后再试"); } finally { setSendingSms(false); }
+  }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -39,19 +71,22 @@ export default function RegisterPage() {
       return;
     }
 
+    if (!smsCode || !realName || !identityDocumentNumber || !region || !occupationType || !applicationReason || !identityDocumentFront || !identityDocumentBack || !agreedToTerms || !agreedToPrivacy) {
+      setError("请完成短信验证、实名认证资料并同意相关协议");
+      return;
+    }
     setLoading(true);
     try {
+      const verify = await fetch("/api/auth/sms/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: normalizedPhone, code: smsCode.trim(), purpose: "registration" }) });
+      if (!verify.ok) { const data = await verify.json().catch(() => ({})); setError(data.error ?? "短信验证码无效"); return; }
+      const payload = new FormData();
+      for (const [key, value] of Object.entries({ name: name.trim(), account: account.trim(), phone: normalizedPhone, recoveryEmail: recoveryEmail.trim(), password, realName: realName.trim(), identityDocumentType: "居民身份证", identityDocumentNumber: identityDocumentNumber.trim(), region: region.trim(), occupationType, companyOrOrganization: companyOrOrganization.trim(), applicationReason: applicationReason.trim(), agreedToTerms: String(agreedToTerms), agreedToPrivacy: String(agreedToPrivacy) })) payload.append(key, value);
+      payload.append("identityDocumentFront", identityDocumentFront);
+      payload.append("identityDocumentBack", identityDocumentBack);
       const res = await fetch("/api/auth/register", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          account: account.trim(),
-          phone: normalizedPhone,
-          recoveryEmail: recoveryEmail.trim(),
-          password,
-        }),
+        body: payload,
       });
 
       const data = await res.json().catch(() => ({}));
@@ -114,15 +149,16 @@ export default function RegisterPage() {
               placeholder="至少 4 位，仅支持小写字母/数字/._-"
             />
 
-            <FormField
-              id="phone"
-              label="手机号"
-              value={phone}
-              onChange={setPhone}
-              required
-              autoComplete="tel"
-              placeholder="请输入 11 位中国大陆手机号"
-            />
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end"><FormField id="phone" label="手机号" value={phone} onChange={setPhone} required autoComplete="tel" placeholder="请输入 11 位中国大陆手机号" /><button type="button" onClick={sendSms} disabled={sendingSms} className="rounded-full border border-[#c9a46b] px-4 py-3 text-sm text-[#7f6542] disabled:opacity-50">{sendingSms ? "发送中..." : "获取验证码"}</button></div>
+            <FormField id="smsCode" label="短信验证码" value={smsCode} onChange={setSmsCode} required placeholder="6 位验证码" />
+            {smsMessage ? <p className="text-sm text-emerald-700">{smsMessage}</p> : null}
+            <FormField id="realName" label="真实姓名" value={realName} onChange={setRealName} required />
+            <FormField id="identityDocumentNumber" label="身份证号码" value={identityDocumentNumber} onChange={setIdentityDocumentNumber} required />
+            <div className="grid gap-4 sm:grid-cols-2"><FormField id="region" label="所在地区" value={region} onChange={setRegion} required /><label className="block"><span className="mb-2 block text-sm font-medium text-[#5b4a39]">职业身份 *</span><select value={occupationType} onChange={(e) => setOccupationType(e.target.value)} required className="w-full rounded-2xl border border-[#eadfce] bg-[#fffdfa] px-4 py-3 text-[15px]"><option value="">请选择</option>{["设计师","整木企业从业人员","家具企业从业人员","门店经营者","经销商","供应链企业","媒体","自媒体","消费者","其他"].map((x) => <option key={x}>{x}</option>)}</select></label></div>
+            <FormField id="companyOrOrganization" label="企业/机构名称（选填）" value={companyOrOrganization} onChange={setCompanyOrOrganization} />
+            <label className="block"><span className="mb-2 block text-sm font-medium text-[#5b4a39]">申请说明 *</span><textarea value={applicationReason} onChange={(e) => setApplicationReason(e.target.value)} required className="w-full rounded-2xl border border-[#eadfce] bg-[#fffdfa] px-4 py-3" /></label>
+            <div className="grid gap-4 sm:grid-cols-2"><FileField label="身份证正面 *" onChange={setIdentityDocumentFront} /><FileField label="身份证反面 *" onChange={setIdentityDocumentBack} /></div>
+            <label className="flex gap-2 text-sm text-[#6c5a46]"><input type="checkbox" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} />我已同意用户协议</label><label className="flex gap-2 text-sm text-[#6c5a46]"><input type="checkbox" checked={agreedToPrivacy} onChange={(e) => setAgreedToPrivacy(e.target.checked)} />我已同意隐私政策</label>
 
             <FormField
               id="recoveryEmail"
@@ -181,6 +217,8 @@ export default function RegisterPage() {
     </div>
   );
 }
+
+function FileField({ label, onChange }: { label: string; onChange: (file: File | null) => void }) { return <label className="block"><span className="mb-2 block text-sm font-medium text-[#5b4a39]">{label}</span><input type="file" accept="image/jpeg,image/png,image/webp" required onChange={(e) => onChange(e.target.files?.[0] ?? null)} className="w-full text-sm" /><span className="mt-1 block text-xs text-[#7a6650]">仅 JPEG、PNG、WebP，最大 5MB；仅供审核人员查看。</span></label>; }
 
 function FormField({
   id,

@@ -6,6 +6,7 @@ import { findDuplicateArticleByTitle, normalizeArticleTitle } from "@/lib/articl
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
 import { revalidateBuyingArticlePaths } from "@/lib/buying-summary";
 import { canMemberUseArticleLocation, getEffectiveMemberAccessForMember } from "@/lib/member-access-resolver";
+import { RESTRICTED_MEMBER_PUBLICATION, isRestrictedMemberType } from "@/lib/membership-publishing";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +46,17 @@ export async function PATCH(
 
   const memberAccess = await getEffectiveMemberAccessForMember(session.sub, session.memberType);
   const body = await request.json().catch(() => ({}));
-  const nextCategoryHref = typeof body.categoryHref === "string" ? body.categoryHref.trim() || null : article.categoryHref;
-  const nextSubHref = typeof body.subHref === "string" ? body.subHref.trim() || null : article.subHref;
+  const restrictedRule = isRestrictedMemberType(session.memberType) ? RESTRICTED_MEMBER_PUBLICATION[session.memberType] : null;
+  const nextCategoryHref = restrictedRule
+    ? restrictedRule.categoryHref
+    : typeof body.categoryHref === "string"
+      ? body.categoryHref.trim() || null
+      : article.categoryHref;
+  const nextSubHref = restrictedRule
+    ? restrictedRule.subHref
+    : typeof body.subHref === "string"
+      ? body.subHref.trim() || null
+      : article.subHref;
   if (!canMemberUseArticleLocation(memberAccess, nextCategoryHref, nextSubHref)) {
     return NextResponse.json({ error: "当前账号未开通该栏目或子栏目投稿权限" }, { status: 403 });
   }
@@ -55,8 +65,13 @@ export async function PATCH(
   if (typeof body.excerpt === "string") data.excerpt = body.excerpt.trim() || null;
   if (typeof body.content === "string") data.content = normalizeRichTextField(body.content) ?? "";
   if (typeof body.coverImage === "string") data.coverImage = body.coverImage.trim() || null;
-  if (typeof body.subHref === "string") data.subHref = body.subHref.trim() || null;
-  if (typeof body.categoryHref === "string") data.categoryHref = body.categoryHref.trim() || null;
+  if (restrictedRule) {
+    data.categoryHref = restrictedRule.categoryHref;
+    data.subHref = restrictedRule.subHref;
+  } else {
+    if (typeof body.subHref === "string") data.subHref = body.subHref.trim() || null;
+    if (typeof body.categoryHref === "string") data.categoryHref = body.categoryHref.trim() || null;
+  }
   if (typeof body.isPinned === "boolean" && (session.role === "SUPER_ADMIN" || session.role === "ADMIN")) {
     data.isPinned = body.isPinned;
   }

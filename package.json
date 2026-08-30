@@ -20,9 +20,12 @@
     "run:company-migration": "powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/run-company-migration.ps1",
     "run:company-rollout": "powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/run-company-rollout.ps1",
     "selftest:keyword-filter": "node scripts/selftest-keyword-filter.js",
+    "selftest:aliyun-sms": "node scripts/selftest-aliyun-sms.js",
+    "selftest:membership-security": "ts-node --transpile-only -r tsconfig-paths/register -P scripts/tsconfig.scripts.json scripts/selftest-membership-security.ts",
     "selftest:news-keywords": "node scripts/selftest-news-keywords.js",
     "selftest:news-pagination": "node scripts/selftest-news-pagination.mjs",
     "selftest:pending-brand-threshold": "node scripts/selftest-pending-brand-threshold.js",
+    "sms:test:aliyun-real": "ts-node --transpile-only -r tsconfig-paths/register -P scripts/tsconfig.scripts.json scripts/test-aliyun-sms-real-send.ts",
     "push:baidu": "ts-node --transpile-only -P scripts/tsconfig.scripts.json scripts/push-baidu.ts",
     "baidu:daily-sync": "ts-node --transpile-only -P scripts/tsconfig.scripts.json scripts/baidu-daily-sync.ts",
     "generate:seo-news": "ts-node --transpile-only -r tsconfig-paths/register -P scripts/tsconfig.scripts.json scripts/generate-seo-news.ts",
@@ -49,6 +52,9 @@
     "db:ensure-admin": "node prisma/ensure-admin.js"
   },
   "dependencies": {
+    "@alicloud/credentials": "^2.4.7",
+    "@alicloud/dysmsapi20170525": "^4.6.0",
+    "@alicloud/openapi-core": "^1.0.8",
     "@prisma/client": "^5.22.0",
     "@tiptap/extension-image": "^3.20.0",
     "@tiptap/extension-table": "^3.26.0",
@@ -73,6 +79,7 @@
     "undici": "^7.22.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",

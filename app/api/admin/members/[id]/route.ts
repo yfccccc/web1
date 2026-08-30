@@ -22,6 +22,11 @@ function serializeMember(
     name: string | null;
     role: string | null;
     memberType: string;
+    phone: string | null;
+    phoneVerified: boolean;
+    accountStatus: string;
+    realName: string | null;
+    identityDocumentType: string | null;
     memberTypeExpiresAt: Date | null;
     rankingWeight: number;
     canPublishWithoutReview: boolean;
@@ -32,12 +37,16 @@ function serializeMember(
     canEditOwnContent: boolean;
     canEditMemberContent: boolean;
     canEditAllContent: boolean;
+    registeredAt: Date | null;
+    reviewedAt: Date | null;
     createdAt: Date;
   }
 ) {
+  const { phone, ...safeMember } = member;
   return {
-    ...mergeEffectivePermissionFlags(member),
+    ...mergeEffectivePermissionFlags(safeMember),
     account: member.email,
+    phoneMasked: phone ? phone.replace(/^(\d{3})\d{4}(\d{4})$/, "$1****$2") : null,
     recoveryEmail: member.recoveryEmail ?? null,
   };
 }
@@ -74,6 +83,7 @@ export async function PATCH(
     canEditOwnContent,
     canEditMemberContent,
     canEditAllContent,
+    accountStatus,
   } = body;
 
   const data: {
@@ -94,7 +104,24 @@ export async function PATCH(
     canEditOwnContent?: boolean;
     canEditMemberContent?: boolean;
     canEditAllContent?: boolean;
+    accountStatus?: string;
+    reviewedAt?: Date | null;
+    reviewedById?: string | null;
   } = {};
+
+  if (accountStatus !== undefined && member.memberType !== "personal") {
+    return NextResponse.json({ error: "仅个人会员账号支持此审核状态" }, { status: 400 });
+  }
+  if (typeof accountStatus === "string" && ["pending_review", "active", "rejected", "suspended"].includes(accountStatus)) {
+    data.accountStatus = accountStatus;
+    if (accountStatus === "pending_review") {
+      data.reviewedAt = null;
+      data.reviewedById = null;
+    } else {
+      data.reviewedAt = new Date();
+      data.reviewedById = session.sub;
+    }
+  }
 
   const accountValue = typeof account === "string" ? account : typeof email === "string" ? email : "";
   if (typeof accountValue === "string" && accountValue.trim()) {
@@ -219,6 +246,11 @@ export async function PATCH(
       name: true,
       role: true,
       memberType: true,
+      phone: true,
+      phoneVerified: true,
+      accountStatus: true,
+      realName: true,
+      identityDocumentType: true,
       memberTypeExpiresAt: true,
       rankingWeight: true,
       canPublishWithoutReview: true,
@@ -229,6 +261,8 @@ export async function PATCH(
       canEditOwnContent: true,
       canEditMemberContent: true,
       canEditAllContent: true,
+      registeredAt: true,
+      reviewedAt: true,
       createdAt: true,
     },
   });

@@ -13,6 +13,15 @@ type MemberRow = {
   name: string | null;
   role: string | null;
   memberType: string;
+  phoneMasked?: string | null;
+  phoneVerified?: boolean;
+  accountStatus?: string;
+  realName?: string | null;
+  identityDocumentType?: string | null;
+  identityDocumentNumberMasked?: string | null;
+  identityDocumentsUploaded?: boolean;
+  reviewedAt?: string | null;
+  articleCount?: number;
   canManageMembers: boolean;
   registeredAt: string | null;
   createdAt: string;
@@ -47,6 +56,14 @@ function formatRegistrationTime(value: string | null | undefined) {
   const hours = String(date.getHours()).padStart(2, "0");
   const minutes = String(date.getMinutes()).padStart(2, "0");
   return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+function accountStatusLabel(value: string | null | undefined) {
+  if (value === "pending_review") return "待审核";
+  if (value === "active") return "已通过";
+  if (value === "rejected") return "已驳回";
+  if (value === "suspended") return "已停用";
+  return value || "--";
 }
 
 export default function AdminAccountsPage() {
@@ -457,7 +474,11 @@ export default function AdminAccountsPage() {
                   <th className="text-left py-2">找回邮箱</th>
                   <th className="text-left py-2">角色</th>
                   <th className="text-left py-2">会员类型</th>
+                  <th className="text-left py-2">手机号</th>
+                  <th className="text-left py-2">实名信息</th>
+                  <th className="text-left py-2">审核状态</th>
                   <th className="text-left py-2">注册时间</th>
+                  <th className="text-left py-2">文章数量</th>
                   <th className="text-left py-2">操作</th>
               </tr>
             </thead>
@@ -487,9 +508,55 @@ export default function AdminAccountsPage() {
                   <td className="py-2 pr-4 text-muted">{m.recoveryEmail || "未设置"}</td>
                   <td className="py-2 pr-4 text-muted">{m.role === "SUPER_ADMIN" ? "主管理员" : m.role === "ADMIN" ? "子管理员" : "会员"}</td>
                   <td className="py-2 pr-4 text-muted">{m.memberType}</td>
+                  <td className="py-2 pr-4 text-muted whitespace-nowrap">
+                    <div>{m.phoneMasked || "未填写"}</div>
+                    <div className="text-xs">{m.phoneVerified ? "已验证" : "未验证"}</div>
+                  </td>
+                  <td className="py-2 pr-4 text-muted">
+                    <div>{m.realName || "未填写"}</div>
+                    <div className="text-xs">
+                      {m.identityDocumentType || "未填写证件类型"}
+                      {m.identityDocumentNumberMasked ? ` / ${m.identityDocumentNumberMasked}` : ""}
+                    </div>
+                    {m.identityDocumentsUploaded ? (
+                      <div className="mt-1 flex gap-2 text-xs">
+                        <a href={`/api/admin/members/${m.id}/identity-documents/front`} target="_blank" rel="noreferrer" className="text-accent hover:underline">证件正面</a>
+                        <a href={`/api/admin/members/${m.id}/identity-documents/back`} target="_blank" rel="noreferrer" className="text-accent hover:underline">证件反面</a>
+                      </div>
+                    ) : (
+                      <div className="text-xs">证件未完整上传</div>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4 text-muted whitespace-nowrap">
+                    <div>{accountStatusLabel(m.accountStatus)}</div>
+                    {m.reviewedAt ? <div className="text-xs">{formatRegistrationTime(m.reviewedAt)}</div> : null}
+                  </td>
                   <td className="py-2 pr-4 text-muted whitespace-nowrap">{formatRegistrationTime(m.registeredAt)}</td>
+                  <td className="py-2 pr-4 text-muted">{m.articleCount ?? 0}</td>
                   <td className="py-2 pr-4">
                     <div className="flex gap-3">
+                      {m.memberType === "personal" && m.accountStatus === "pending_review" ? (
+                        <>
+                          <button
+                            className="apple-inline-link"
+                            type="button"
+                            onClick={() => {
+                              if (confirm("确认审核通过该个人会员账号？")) void updateMember(m.id, { accountStatus: "active" });
+                            }}
+                          >
+                            审核通过
+                          </button>
+                          <button
+                            className="text-xs text-red-600 hover:underline"
+                            type="button"
+                            onClick={() => {
+                              if (confirm("确认驳回该个人会员账号？")) void updateMember(m.id, { accountStatus: "rejected" });
+                            }}
+                          >
+                            驳回
+                          </button>
+                        </>
+                      ) : null}
                       <button
                         className="apple-inline-link"
                         type="button"

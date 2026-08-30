@@ -24,6 +24,14 @@ function serializeMember(
     name: string | null;
     role: string | null;
     memberType: string;
+    phone: string | null;
+    phoneVerified: boolean;
+    accountStatus: string;
+    realName: string | null;
+    identityDocumentType: string | null;
+    identityDocumentNumber: string | null;
+    identityDocumentFrontPath: string | null;
+    identityDocumentBackPath: string | null;
     memberTypeExpiresAt?: Date | null;
     rankingWeight?: number;
     canPublishWithoutReview: boolean;
@@ -35,7 +43,9 @@ function serializeMember(
     canEditMemberContent: boolean;
     canEditAllContent: boolean;
     registeredAt: Date | null;
+    reviewedAt: Date | null;
     createdAt: Date;
+    _count: { articles: number };
     enterprise?: {
       id: string;
       companyName: string | null;
@@ -44,10 +54,24 @@ function serializeMember(
     } | null;
   }
 ) {
-  const merged = mergeEffectivePermissionFlags(member);
+  const {
+    phone,
+    identityDocumentNumber,
+    identityDocumentFrontPath,
+    identityDocumentBackPath,
+    _count,
+    ...safeMember
+  } = member;
+  const merged = mergeEffectivePermissionFlags(safeMember);
   return {
     ...merged,
     account: member.email,
+    phoneMasked: phone ? phone.replace(/^(\d{3})\d{4}(\d{4})$/, "$1****$2") : null,
+    identityDocumentNumberMasked: identityDocumentNumber
+      ? identityDocumentNumber.replace(/^(.{3}).+(.{4})$/, "$1***********$2")
+      : null,
+    identityDocumentsUploaded: Boolean(identityDocumentFrontPath && identityDocumentBackPath),
+    articleCount: _count.articles,
     recoveryEmail: member.recoveryEmail ?? null,
     registeredAt: member.registeredAt ? member.registeredAt.toISOString() : null,
     enterprise: member.enterprise ?? null,
@@ -89,6 +113,14 @@ export async function GET(request: NextRequest) {
       name: true,
       role: true,
       memberType: true,
+      phone: true,
+      phoneVerified: true,
+      accountStatus: true,
+      realName: true,
+      identityDocumentType: true,
+      identityDocumentNumber: true,
+      identityDocumentFrontPath: true,
+      identityDocumentBackPath: true,
       memberTypeExpiresAt: true,
       rankingWeight: true,
       canPublishWithoutReview: true,
@@ -100,7 +132,9 @@ export async function GET(request: NextRequest) {
       canEditMemberContent: true,
       canEditAllContent: true,
       registeredAt: true,
+      reviewedAt: true,
       createdAt: true,
+      _count: { select: { articles: true } },
       enterprise: {
         select: {
           id: true,
@@ -215,6 +249,14 @@ export async function POST(request: NextRequest) {
         name: true,
         role: true,
         memberType: true,
+        phone: true,
+        phoneVerified: true,
+        accountStatus: true,
+        realName: true,
+        identityDocumentType: true,
+        identityDocumentNumber: true,
+        identityDocumentFrontPath: true,
+        identityDocumentBackPath: true,
         memberTypeExpiresAt: true,
         rankingWeight: true,
         canPublishWithoutReview: true,
@@ -226,7 +268,9 @@ export async function POST(request: NextRequest) {
         canEditMemberContent: true,
         canEditAllContent: true,
         registeredAt: true,
+        reviewedAt: true,
         createdAt: true,
+        _count: { select: { articles: true } },
       },
     });
 
