@@ -96,6 +96,8 @@ export async function GET() {
       type: session.memberType,
       label: membershipRule.label,
       phone: session.phone,
+      phoneVerified: session.phoneVerified,
+      accountStatus: session.accountStatus,
       rankingWeight: session.rankingWeight,
       canManageMembers: session.canManageMembers,
     },

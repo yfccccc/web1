@@ -5,6 +5,7 @@
     "module": "CommonJS",
     "moduleResolution": "node",
     "target": "ES2020",
+    "jsx": "react-jsx",
     "noEmit": true,
     "isolatedModules": false
   },

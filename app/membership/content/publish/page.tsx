@@ -71,6 +71,10 @@ import { slugify } from "@/lib/slug";
 import { InlinePageBackLink } from "@/components/InlinePageBackLink";
 import { PUBLIC_CONTACT_PHONE } from "@/lib/public-site-config";
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
+import {
+  MemberPublishAccessBoundary,
+  resolveMemberPublishAccessBlock,
+} from "@/components/membership/MemberPublishAccessBoundary";
 
 function LazyEditorPlaceholder({ label }: { label: string }) {
   return (
@@ -285,6 +289,8 @@ function PublishCenterPageInner() {
   const [role, setRole] = useState<string | null>(null);
   const [memberType, setMemberType] = useState<MemberType>("personal");
   const [memberPhone, setMemberPhone] = useState("");
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [accountStatus, setAccountStatus] = useState<string | null>(null);
   const [membershipRule, setMembershipRule] = useState<MembershipRule | null>(null);
   const [memberAccess, setMemberAccess] = useState<MemberAccess>(getDefaultMemberAccess());
   const [items, setItems] = useState<Row[]>([]);
@@ -504,6 +510,8 @@ function PublishCenterPageInner() {
     const t = (me.memberType ?? "personal") as MemberType;
     setMemberType(t);
     setMemberPhone(typeof me.phone === "string" ? me.phone : "");
+    setPhoneVerified(me.phoneVerified === true);
+    setAccountStatus(typeof me.accountStatus === "string" ? me.accountStatus : null);
     setMembershipRule(me.membershipRule ?? null);
     setMemberAccess(me.memberAccess ?? getDefaultMemberAccess());
 
@@ -1235,6 +1243,10 @@ function PublishCenterPageInner() {
     );
   }
 
+  if (authed === null) {
+    return <div className="mx-auto max-w-6xl px-4 py-12 text-sm text-muted">正在核验账号投稿权限...</div>;
+  }
+
   if (authed === false) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-12">
@@ -1274,10 +1286,19 @@ function PublishCenterPageInner() {
           ? "\u4f01\u4e1a\u8ba4\u8bc1\u8d44\u6599\u5df2\u63d0\u4ea4\uff0c\u5f53\u524d\u6b63\u5728\u5ba1\u6838\u4e2d\u3002"
           : currentVerificationStatus === "rejected"
             ? "\u4f01\u4e1a\u8ba4\u8bc1\u66fe\u88ab\u9a73\u56de\uff0c\u53ef\u6309\u5ba1\u6838\u610f\u89c1\u8865\u5145\u540e\u91cd\u65b0\u63d0\u4ea4\u3002"
-            : "\u5b8c\u6210\u4f01\u4e1a\u8ba4\u8bc1\u540e\u53ef\u83b7\u5f97\u4f01\u4e1a\u8be6\u60c5\u5c55\u793a\u9875\uff0c\u5e76\u540c\u6b65\u4f01\u4e1a\u8d44\u6599\u3002";
+             : "\u5b8c\u6210\u4f01\u4e1a\u8ba4\u8bc1\u540e\u53ef\u83b7\u5f97\u4f01\u4e1a\u8be6\u60c5\u5c55\u793a\u9875\uff0c\u5e76\u540c\u6b65\u4f01\u4e1a\u8d44\u6599\u3002";
+
+  const publishAccessBlock = resolveMemberPublishAccessBlock({
+    memberType,
+    accountStatus,
+    phoneVerified,
+    categoryRemainingCount: selectedCategoryAccess?.remainingCount,
+    subcategoryRemainingCount: effectiveActiveSubAccess?.remainingCount,
+  });
 
 
   return (
+    <MemberPublishAccessBoundary block={publishAccessBlock}>
     <div className="max-w-6xl mx-auto px-4 py-12">
       <nav className="mb-6 text-sm text-muted" aria-label="面包屑">
         <Link href="/" className="hover:text-accent">首页</Link>
@@ -1923,6 +1944,7 @@ function PublishCenterPageInner() {
         />
       )}
     </div>
+    </MemberPublishAccessBoundary>
   );
 }
 

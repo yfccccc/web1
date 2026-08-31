@@ -514,17 +514,25 @@ export default function AdminAccountsPage() {
                   </td>
                   <td className="py-2 pr-4 text-muted">
                     <div>{m.realName || "未填写"}</div>
-                    <div className="text-xs">
-                      {m.identityDocumentType || "未填写证件类型"}
-                      {m.identityDocumentNumberMasked ? ` / ${m.identityDocumentNumberMasked}` : ""}
-                    </div>
-                    {m.identityDocumentsUploaded ? (
-                      <div className="mt-1 flex gap-2 text-xs">
-                        <a href={`/api/admin/members/${m.id}/identity-documents/front`} target="_blank" rel="noreferrer" className="text-accent hover:underline">证件正面</a>
-                        <a href={`/api/admin/members/${m.id}/identity-documents/back`} target="_blank" rel="noreferrer" className="text-accent hover:underline">证件反面</a>
+                    {m.identityDocumentType || m.identityDocumentNumberMasked || m.identityDocumentsUploaded ? (
+                      <div className="mt-1 text-xs">
+                        <div>
+                          历史证件资料：{m.identityDocumentType || "类型未记录"}
+                          {m.identityDocumentNumberMasked ? ` / ${m.identityDocumentNumberMasked}` : ""}
+                        </div>
+                        {m.identityDocumentsUploaded ? (
+                          <div className="mt-1 flex gap-2">
+                            <a href={`/api/admin/members/${m.id}/identity-documents/front`} target="_blank" rel="noreferrer" className="text-accent hover:underline">证件正面</a>
+                            <a href={`/api/admin/members/${m.id}/identity-documents/back`} target="_blank" rel="noreferrer" className="text-accent hover:underline">证件反面</a>
+                          </div>
+                        ) : (
+                          <div>历史证件资料未完整</div>
+                        )}
                       </div>
                     ) : (
-                      <div className="text-xs">证件未完整上传</div>
+                      <div className="mt-1 text-xs">
+                        {m.memberType === "personal" ? "新注册个人会员不采集身份证件资料" : "无历史证件资料"}
+                      </div>
                     )}
                   </td>
                   <td className="py-2 pr-4 text-muted whitespace-nowrap">

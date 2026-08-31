@@ -20,6 +20,8 @@ export async function GET() {
     displayName: session.displayName,
     email: session.email,
     phone: session.phone,
+    phoneVerified: session.phoneVerified,
+    accountStatus: session.accountStatus,
     role: session.role,
     memberType: session.memberType,
     rankingWeight: session.rankingWeight,
