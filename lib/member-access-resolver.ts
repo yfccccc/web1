@@ -2,7 +2,11 @@ import { MEMBER_PUBLISH_CATEGORY_OPTIONS } from "@/lib/content-taxonomy";
 import { getMemberGrantSettings, type GrantFeatureKey, type MemberGrantSettings } from "@/lib/member-grants";
 import { getMembershipRule, type LegacyMemberType, type MembershipRule } from "@/lib/membership-rules";
 import { prisma } from "@/lib/prisma";
-import { RESTRICTED_MEMBER_PUBLICATION, isRestrictedMemberType } from "@/lib/membership-publishing";
+import {
+  RESTRICTED_MEMBER_PUBLICATION,
+  hasSpecialEnterprisePublishingQuota,
+  isRestrictedMemberType,
+} from "@/lib/membership-publishing";
 
 export type EffectiveMemberFeatureAccess = Record<GrantFeatureKey, boolean>;
 
@@ -123,9 +127,11 @@ export function buildEffectiveMemberAccessFromSources(
   membershipRule: MembershipRule,
   grants: MemberGrantSettings,
   usageMaps: UsageMaps,
-  year: number
+  year: number,
+  memberId?: string
 ): EffectiveMemberAccess {
   const restrictedRule = isRestrictedMemberType(memberType) ? RESTRICTED_MEMBER_PUBLICATION[memberType] : null;
+  const allowSpecialQuota = hasSpecialEnterprisePublishingQuota(memberId, memberType);
   const defaultFeatures = getDefaultFeatureAccess(membershipRule);
   const grantActive = isGrantActive(grants, new Date());
 
@@ -147,9 +153,12 @@ export function buildEffectiveMemberAccessFromSources(
         typeof (grantActive ? subGrant?.enabled : null) === "boolean"
           ? Boolean(subGrant?.enabled)
           : defaultSubEnabled;
+      const specialSubcategoryLimit = allowSpecialQuota && grantActive
+        ? subGrant?.annualLimit ?? categoryLimitOverride
+        : null;
       const annualLimit = restrictedRule
         ? category.href === restrictedRule.categoryHref && sub.href === restrictedRule.subHref
-          ? restrictedRule.annualLimit
+          ? specialSubcategoryLimit ?? restrictedRule.annualLimit
           : null
         : (grantActive ? subGrant?.annualLimit : null) ?? null;
       const usedCount = usageMaps.subcategoryCounts.get(`${category.href}::${sub.href}`) ?? 0;
@@ -168,7 +177,9 @@ export function buildEffectiveMemberAccessFromSources(
         ? categoryEnabledOverride || hasEnabledSubcategory
         : defaultCategoryEnabled || hasEnabledSubcategory;
     const annualLimit = restrictedRule && category.href === restrictedRule.categoryHref
-      ? restrictedRule.annualLimit
+      ? allowSpecialQuota && grantActive
+        ? categoryLimitOverride ?? restrictedRule.annualLimit
+        : restrictedRule.annualLimit
       : categoryLimitOverride ?? defaultCategoryLimit;
     const usedCount = usageMaps.categoryCounts.get(category.href) ?? 0;
 
@@ -217,7 +228,7 @@ export async function getEffectiveMemberAccessForMember(
     getArticleUsageMaps(memberId, year),
   ]);
 
-  return buildEffectiveMemberAccessFromSources(memberType, membershipRule, grants, usageMaps, year);
+  return buildEffectiveMemberAccessFromSources(memberType, membershipRule, grants, usageMaps, year, memberId);
 }
 
 export function findEffectiveCategoryAccess(access: EffectiveMemberAccess, categoryHref: string) {

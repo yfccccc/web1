@@ -27,16 +27,19 @@ const publishing = require("../lib/membership-publishing") as typeof import("../
 
 async function submissionError(input: {
   memberType: string;
+  memberId?: string;
   role?: string | null;
   accountStatus?: string | null;
   phoneVerified?: boolean;
+  effectiveAnnualLimit?: number | null;
 }) {
   return publishing.assertRestrictedMemberCanSubmit({
-    memberId: "member-security-selftest",
+    memberId: input.memberId ?? "member-security-selftest",
     memberType: input.memberType,
     role: input.role ?? "MEMBER",
     accountStatus: input.accountStatus ?? "active",
     phoneVerified: input.phoneVerified ?? true,
+    effectiveAnnualLimit: input.effectiveAnnualLimit,
   });
 }
 
@@ -68,6 +71,51 @@ async function run() {
   }
   articleCount = 5;
   assert.ok(await submissionError({ memberType: "enterprise_basic" }));
+
+  articleCount = 999;
+  assert.equal(
+    await submissionError({
+      memberId: "cmq0aj24d00c012ug20mbbnzo",
+      memberType: "enterprise_basic",
+      effectiveAnnualLimit: 1000,
+    }),
+    null,
+  );
+  articleCount = 1000;
+  assert.ok(
+    await submissionError({
+      memberId: "cmq0aj24d00c012ug20mbbnzo",
+      memberType: "enterprise_basic",
+      effectiveAnnualLimit: 1000,
+    }),
+  );
+
+  articleCount = 159;
+  assert.equal(
+    await submissionError({
+      memberId: "cmmyd75kk000cwnv1onvawe8q",
+      memberType: "enterprise_basic",
+      effectiveAnnualLimit: 160,
+    }),
+    null,
+  );
+  articleCount = 160;
+  assert.ok(
+    await submissionError({
+      memberId: "cmmyd75kk000cwnv1onvawe8q",
+      memberType: "enterprise_basic",
+      effectiveAnnualLimit: 160,
+    }),
+  );
+
+  articleCount = 5;
+  assert.ok(
+    await submissionError({
+      memberId: "cmn5mtkan00u1aenppofkhcu4",
+      memberType: "enterprise_basic",
+      effectiveAnnualLimit: 5000,
+    }),
+  );
 
   articleCount = 999;
   assert.equal(await submissionError({ memberType: "personal", role: "ADMIN" }), null);

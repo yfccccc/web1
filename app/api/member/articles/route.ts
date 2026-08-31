@@ -87,12 +87,17 @@ export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
   const memberAccess = await getEffectiveMemberAccessForMember(session.sub, session.memberType);
+  const restrictedRule = isRestrictedMemberType(session.memberType) ? RESTRICTED_MEMBER_PUBLICATION[session.memberType] : null;
+  const restrictedCategoryAccess = restrictedRule
+    ? findEffectiveCategoryAccess(memberAccess, restrictedRule.categoryHref)
+    : null;
   const restrictedSubmitError = await assertRestrictedMemberCanSubmit({
     memberId: session.sub,
     memberType: session.memberType,
     role: session.role,
     accountStatus: session.accountStatus,
     phoneVerified: session.phoneVerified,
+    effectiveAnnualLimit: restrictedCategoryAccess?.annualLimit,
   });
   if (restrictedSubmitError) return NextResponse.json({ error: restrictedSubmitError }, { status: 403 });
   const membershipRule = memberAccess.membershipRule;
@@ -128,7 +133,6 @@ export async function POST(request: NextRequest) {
 
   const requestedCategoryHref =
     typeof categoryHref === "string" ? categoryHref.trim() : "";
-  const restrictedRule = isRestrictedMemberType(session.memberType) ? RESTRICTED_MEMBER_PUBLICATION[session.memberType] : null;
   const categoryHrefTrim = restrictedRule ? restrictedRule.categoryHref : requestedCategoryHref;
   if (!MEMBER_ALLOWED_CATEGORY_HREFS.has(categoryHrefTrim)) {
     return NextResponse.json({ error: "栏目非法或不支持投稿" }, { status: 400 });
