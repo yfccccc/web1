@@ -19,6 +19,7 @@ import { getDefaultMembershipRules, normalizeMembershipRules } from "../lib/memb
 const ACCOUNT_A_ID = "cmq0aj24d00c012ug20mbbnzo";
 const ACCOUNT_B_ID = "cmn5mtkan00u1aenppofkhcu4";
 const ACCOUNT_C_ID = "cmmyd75kk000cwnv1onvawe8q";
+const OLD_ZHJ_ACCOUNT_ID = "cmmyd6f0m000awnv11ni35xja";
 const ORDINARY_IDS = [
   "cmn5msuox0001aenp4kyedcez",
   "cmn5msuup0007aenphap3t92d",
@@ -84,10 +85,13 @@ assert.equal(historicalTierOverride.enterprise_basic.galleryUploadLimit, ENTERPR
 
 assertQuota(ACCOUNT_A_ID, 1000, 101, 1000);
 assertQuota(ACCOUNT_C_ID, 160, 95, 160);
+assertQuota(OLD_ZHJ_ACCOUNT_ID, 5000, 15, 5000);
 assert.equal(isAnnualLimitReached(999, 1000), false);
 assert.equal(isAnnualLimitReached(1000, 1000), true);
 assert.equal(isAnnualLimitReached(159, 160), false);
 assert.equal(isAnnualLimitReached(160, 160), true);
+assert.equal(isAnnualLimitReached(4999, 5000), false);
+assert.equal(isAnnualLimitReached(5000, 5000), true);
 
 assertQuota(ACCOUNT_B_ID, 5000, 0, 5);
 for (const ordinaryId of ORDINARY_IDS) {
@@ -133,5 +137,6 @@ console.log("STANDARD_ENTERPRISE_BASIC_LIMIT_TEST=PASS");
 console.log("A_SPECIAL_QUOTA_TEST=PASS");
 console.log("B_SPECIAL_QUOTA_TEST=PASS_NOT_RESTORED_WITHOUT_EVIDENCE");
 console.log("C_SPECIAL_QUOTA_TEST=PASS");
+console.log("OLD_ZHJ_SPECIAL_QUOTA_TEST=PASS");
 console.log("ORDINARY_ENTERPRISE_BASIC_STILL_5_PER_YEAR=PASS");
 console.log("CATEGORY_FORCE_REGRESSION=PASS");

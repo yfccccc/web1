@@ -108,6 +108,24 @@ async function run() {
     }),
   );
 
+  articleCount = 4999;
+  assert.equal(
+    await submissionError({
+      memberId: "cmmyd6f0m000awnv11ni35xja",
+      memberType: "enterprise_basic",
+      effectiveAnnualLimit: 5000,
+    }),
+    null,
+  );
+  articleCount = 5000;
+  assert.ok(
+    await submissionError({
+      memberId: "cmmyd6f0m000awnv11ni35xja",
+      memberType: "enterprise_basic",
+      effectiveAnnualLimit: 5000,
+    }),
+  );
+
   articleCount = 5;
   assert.ok(
     await submissionError({

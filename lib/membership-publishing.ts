@@ -8,6 +8,7 @@ export const RESTRICTED_MEMBER_PUBLICATION = {
 const SPECIAL_ENTERPRISE_PUBLISHING_QUOTA_MEMBER_IDS = new Set([
   "cmq0aj24d00c012ug20mbbnzo", // zhzx / 迪凡广告
   "cmmyd75kk000cwnv1onvawe8q", // dingzhijiaju / 浙江温州
+  "cmmyd6f0m000awnv11ni35xja", // zhihuijia
 ]);
 
 export function isRestrictedMemberType(memberType: string) {
