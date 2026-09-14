@@ -243,6 +243,15 @@ function normalizeKeywordList(input: string | null | undefined) {
   ).slice(0, 5);
 }
 
+export function formatImportedKeywordCsv(input: string | null | undefined) {
+  return unique(
+    (input || "")
+      .split(/[，,、;；\n]+/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+  ).slice(0, 5).join(",");
+}
+
 function clampKeywordLength(input: string) {
   const compactLength = normalizedKeywordLength(input);
   if (compactLength < 2) return false;
@@ -579,10 +588,12 @@ export async function syncArticleKeywords(options: {
   title: string;
   content: string;
   manualKeywords?: string | null;
+  canonicalKeywords?: string | null;
 }) {
   const result = await extractNewsKeywords({ title: options.title, content: options.content });
-  const autoKeywords = result.keywords.map((item) => item.keyword);
-  const manualKeywords = normalizeKeywordList(options.manualKeywords);
+  const importedKeywords = formatImportedKeywordCsv(options.canonicalKeywords).split(",").filter(Boolean);
+  const autoKeywords = importedKeywords.length > 0 ? importedKeywords : result.keywords.map((item) => item.keyword);
+  const manualKeywords = importedKeywords.length > 0 ? importedKeywords : normalizeKeywordList(options.manualKeywords);
   const activeKeywords = manualKeywords.length > 0 ? manualKeywords : autoKeywords;
 
   await prisma.$transaction(async (tx) => {

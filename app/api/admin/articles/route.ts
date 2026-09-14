@@ -9,7 +9,7 @@ import { resolveTagSlugs } from "@/lib/tag-suggest";
 import { generateUniqueArticleSlug } from "@/lib/slug";
 import { isContentReviewRequired } from "@/lib/app-settings";
 import { findDuplicateArticleByTitle, normalizeArticleTitle } from "@/lib/article-title";
-import { formatKeywordCsv, syncArticleKeywords } from "@/lib/news-keywords-v2";
+import { formatImportedKeywordCsv, formatKeywordCsv, syncArticleKeywords } from "@/lib/news-keywords-v2";
 import { resolveTabKeyFromHref } from "@/lib/content-taxonomy";
 import { buildContentTabWhere } from "@/lib/content-taxonomy";
 import { pushApprovedNewsToBaidu } from "@/lib/baidu-submit";
@@ -209,6 +209,7 @@ export async function POST(request: NextRequest) {
       ownedEnterpriseId,
       tagSlugs,
       manualKeywords,
+      syncWordKeywords,
       recommendIds,
       productRecommendations,
       faqJson,
@@ -320,7 +321,10 @@ export async function POST(request: NextRequest) {
         ownedEnterpriseId: normalizedOwnedEnterpriseId,
         faqJson: typeof faqJson === "string" ? faqJson.trim() || null : null,
         tagSlugs: resolvedTagSlugs.length > 0 ? resolvedTagSlugs.join(",") : null,
-        manualKeywords: typeof manualKeywords === "string" ? formatKeywordCsv(manualKeywords.split(/[,\n，]+/)) || null : null,
+        manualKeywords:
+          typeof manualKeywords === "string"
+            ? (syncWordKeywords === true ? formatImportedKeywordCsv(manualKeywords) : formatKeywordCsv(manualKeywords.split(/[,\n，]+/))) || null
+            : null,
         recommendIds: typeof recommendIds === "string" ? recommendIds.trim() || null : null,
         productRecommendations:
           typeof productRecommendations === "string"
@@ -358,6 +362,7 @@ export async function POST(request: NextRequest) {
         title: normalizedTitle,
         content: normalizedContent,
         manualKeywords: typeof manualKeywords === "string" ? manualKeywords : null,
+        canonicalKeywords: syncWordKeywords === true && typeof manualKeywords === "string" ? manualKeywords : null,
       });
     } catch (keywordError) {
       await prisma.newsKeyword.deleteMany({ where: { newsId: article.id } }).catch(() => undefined);

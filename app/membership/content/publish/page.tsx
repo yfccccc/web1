@@ -71,6 +71,7 @@ import { slugify } from "@/lib/slug";
 import { InlinePageBackLink } from "@/components/InlinePageBackLink";
 import { PUBLIC_CONTACT_PHONE } from "@/lib/public-site-config";
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
+import type { ImportedDocumentMetadata } from "@/lib/richtext-import-contract";
 
 function LazyEditorPlaceholder({ label }: { label: string }) {
   return (
@@ -310,6 +311,8 @@ function PublishCenterPageInner() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [displayAuthor, setDisplayAuthor] = useState("");
   const [excerpt, setExcerpt] = useState("");
+  const [manualKeywords, setManualKeywords] = useState("");
+  const [wordKeywordsImported, setWordKeywordsImported] = useState(false);
   const [content, setContent] = useState("");
   const [brandStructured, setBrandStructured] = useState<BrandStructuredData>(createDefaultBrandStructuredData());
   const [standardStructured, setStandardStructured] = useState<StandardStructuredData>(createDefaultStandardStructuredData());
@@ -397,6 +400,17 @@ function PublishCenterPageInner() {
     },
     [applyImportedTitle, editTitle]
   );
+
+  const handleImportedPublishMetadata = useCallback((metadata: ImportedDocumentMetadata) => {
+    if (metadata.title) applyImportedTitle(metadata.title, title, setTitle, "标题");
+    if (metadata.summary && (!excerpt.trim() || excerpt.trim() === metadata.summary || window.confirm("是否用 Word 摘要替换当前摘要？"))) {
+      setExcerpt(metadata.summary);
+    }
+    if (tab === "articles" && metadata.keywords && (!manualKeywords.trim() || manualKeywords.trim() === metadata.keywords || window.confirm("是否用 Word 关键词替换当前关键词？"))) {
+      setManualKeywords(metadata.keywords);
+      setWordKeywordsImported(true);
+    }
+  }, [applyImportedTitle, excerpt, manualKeywords, tab, title]);
 
   const allCategoryAccess = useMemo(
     () => (memberAccess.categories.length > 0 ? memberAccess.categories : getDefaultMemberAccess().categories),
@@ -736,6 +750,8 @@ function PublishCenterPageInner() {
     setSourceUrl("");
     setDisplayAuthor("");
     setExcerpt("");
+    setManualKeywords("");
+    setWordKeywordsImported(false);
     setContent("");
     setBrandStructured(createDefaultBrandStructuredData());
     setStandardStructured(createDefaultStandardStructuredData());
@@ -826,6 +842,8 @@ function PublishCenterPageInner() {
       sourceUrl: sourceUrl.trim() || null,
       displayAuthor: displayAuthor.trim() || null,
       excerpt: excerpt.trim() || null,
+      manualKeywords: manualKeywords.trim() || null,
+      syncWordKeywords: wordKeywordsImported,
       content: composedContent,
       categoryHref: selectedCategory.href,
       subHref: subOptions.length > 0 ? effectivePublishSubHref || null : null,
@@ -901,6 +919,8 @@ function PublishCenterPageInner() {
     setTitle("");
     setSlug("");
     setExcerpt("");
+    setManualKeywords("");
+    setWordKeywordsImported(false);
     setContent("");
     resetBrandStructured();
     resetStandardStructured();
@@ -1605,6 +1625,17 @@ function PublishCenterPageInner() {
             value={excerpt}
             onChange={(e) => setExcerpt(e.target.value)}
           />
+          {safeTab === "articles" && (
+            <>
+              <label className="block text-sm text-muted">关键词（逗号分隔）</label>
+              <input
+                className="w-full border border-border rounded px-3 py-2 bg-surface"
+                value={manualKeywords}
+                onChange={(e) => setManualKeywords(e.target.value)}
+                placeholder="如：木地板清洁,装修开荒,深度清洁"
+              />
+            </>
+          )}
           {(safeTab === "terms" || safeTab === "standards") && (
             <div className="rounded-2xl border border-border bg-surface p-4 space-y-3">
               <p className="text-sm font-medium text-primary">文档信息</p>
@@ -1727,7 +1758,7 @@ function PublishCenterPageInner() {
             safeTab !== "awards" && (
             <>
               <label className="block text-sm text-muted">正文</label>
-              <RichEditor value={content} onChange={setContent} onImportedTitle={handleImportedPublishTitle} minHeight={280} placeholder="" allowClipboardImagePaste={canPasteImages} toolbarIcons statusResetKey={`member-publish:${safeTab}:${publishEditorStatusVersion}`} />
+              <RichEditor value={content} onChange={setContent} onImportedMetadata={handleImportedPublishMetadata} minHeight={280} placeholder="" allowClipboardImagePaste={canPasteImages} toolbarIcons statusResetKey={`member-publish:${safeTab}:${publishEditorStatusVersion}`} />
             </>
           )}
           {safeTab === "brands" && (
