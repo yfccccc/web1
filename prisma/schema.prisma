@@ -409,6 +409,7 @@ model Article {
   viewDedupRecords    ArticleViewDedup[]
   changeRequests      ArticleChangeRequest[]
   keywordItems        NewsKeyword[]
+  keywordObservations PendingKeywordArticle[]
   baiduPushJob        BaiduPushJob?
 
   @@index([status])
@@ -480,6 +481,29 @@ model IndustryWhitelist {
   @@index([category])
   @@index([weight])
   @@map("industry_whitelist")
+}
+
+model PendingKeyword {
+  id           String                  @id @default(cuid())
+  word         String                  @unique
+  count        Int                     @default(0)
+  lastSeen     DateTime                @default(now()) @map("last_seen")
+  observations PendingKeywordArticle[]
+
+  @@index([count])
+  @@map("pending_keywords")
+}
+
+model PendingKeywordArticle {
+  keywordId String         @map("keyword_id")
+  articleId String         @map("article_id")
+  lastSeen  DateTime       @default(now()) @map("last_seen")
+  keyword   PendingKeyword @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+  article   Article        @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@id([keywordId, articleId])
+  @@index([articleId])
+  @@map("pending_keyword_articles")
 }
 
 model PendingBrand {

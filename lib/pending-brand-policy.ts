@@ -1,4 +1,4 @@
-export const PENDING_BRAND_GENERATION_ENABLED = false;
+export const PENDING_BRAND_GENERATION_ENABLED = true;
 
 export function applyPendingBrandPolicy<TKeyword, TPendingBrand>(input: {
   keywords: TKeyword[];
