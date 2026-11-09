@@ -12,6 +12,7 @@ export const NEWS_KEYWORD_PROMOTION_THRESHOLD = 3;
 // Runtime exclusion while database changes remain forbidden.
 export const NEWS_DISABLED_KEYWORDS = ["符合国际", "除了整木"];
 export const NEWS_ENTITY_STRIP_PREFIXES = [
+  "兼", "期内", "今年", "去年", "同期", "截至",
   "以下简称", "以下称", "由于", "以及",
   "由", "根据", "除了", "担任", "对于", "关于", "随着", "在",
   "把", "被", "让", "以", "为", "从", "对", "用",

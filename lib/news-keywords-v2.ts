@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { buildPublishedNewsWhere } from "@/lib/news-listing";
 import { stripHtml } from "@/lib/text";
 import {
   INDUSTRY_WHITELIST_SEED,
@@ -674,11 +675,12 @@ export async function getRecommendedNews(articleId: string, limit = 8) {
       return prisma.article.findMany({
         where: {
           id: { in: manualIds.filter((id) => id !== articleId) },
-          status: "approved",
+          ...buildPublishedNewsWhere(),
         },
         take: limit,
         select: {
           id: true,
+          slug: true,
           title: true,
           excerpt: true,
           coverImage: true,
@@ -701,13 +703,14 @@ export async function getRecommendedNews(articleId: string, limit = 8) {
 
     const candidates = await prisma.article.findMany({
       where: {
-        status: "approved",
+        ...buildPublishedNewsWhere(),
         id: { not: articleId },
       },
       orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
       take: 80,
       select: {
         id: true,
+        slug: true,
         title: true,
         excerpt: true,
         coverImage: true,

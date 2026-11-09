@@ -70,7 +70,8 @@ export function mergeContainedKeywords<T extends { keyword: string; source?: str
 
 export function isDisplayNewsKeyword(word: string): boolean {
   const hanLength = (word.match(/[\u4e00-\u9fa5]/g) ?? []).length;
-  return hanLength <= 6 && !NEWS_DISPLAY_KEYWORD_FORBIDDEN_PARTS.some((part) => word.includes(part));
+  return hanLength <= 6 && !["兼", "期内", "今年", "去年", "同期", "截至"].some(prefix => word.startsWith(prefix)) &&
+    !NEWS_DISPLAY_KEYWORD_FORBIDDEN_PARTS.some((part) => word.includes(part));
 }
 
 export function serializeNewsJsonLd(data: object): string {

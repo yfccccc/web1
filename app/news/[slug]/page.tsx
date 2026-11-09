@@ -371,7 +371,11 @@ export default async function ArticlePage({ params, searchParams }: Props) {
   const articleSection = resolveNewsSectionLabel(article.subHref, article.categoryHref);
   const keywords = parseKeywordList(article.manualKeywords?.trim() || article.keywords);
   const faqPairs = parseFaqPairs(article.faqPairsJson ?? article.faqJson);
-  const recommendedArticles = await getRecommendedNews(article.id, 4);
+  const recommendedArticles = (await getRecommendedNews(article.id, 4)).filter(
+    (item) => item && typeof item.id === "string" && item.id.trim() &&
+      typeof item.slug === "string" && item.slug.trim() &&
+      typeof item.title === "string" && item.title.trim(),
+  );
   const sourceSummary = buildArticleSourceSummary(article);
   const aftermarketConfig = await getNewsAftermarketConfig();
   const productRecommendations = parseProductRecommendations(article.productRecommendations).slice(
