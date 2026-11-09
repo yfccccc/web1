@@ -4,7 +4,7 @@ import { resolveUploadedImageUrl } from "@/lib/uploaded-image";
 
 type Status = "pending" | "approved" | "rejected";
 
-type VerificationItem = {
+export type VerificationItem = {
   id: string;
   companyName: string;
   companyShortName?: string | null;
@@ -21,6 +21,7 @@ type VerificationItem = {
   productSystem?: string | null;
   coreAdvantages?: string | null;
   status: Status;
+  reviewNote?: string | null;
   approvedEnterpriseId?: string | null;
   member: {
     email: string;
@@ -72,7 +73,7 @@ export function VerificationCard({
         <div>
           <h2 className="text-lg font-semibold text-primary">{item.companyName}</h2>
           <p className="text-xs text-muted">
-            提交账号：{item.member.name || item.member.email} / {item.member.memberType}
+            提交账号：{item.member.email} / {item.member.memberType}
           </p>
         </div>
         <p className="text-sm text-primary">{statusText(item.status)}</p>
@@ -129,6 +130,8 @@ export function VerificationCard({
           查看生成后的企业详情页
         </Link>
       )}
+
+      {item.reviewNote && <p className="text-sm text-muted">审核意见：{item.reviewNote}</p>}
 
       {item.status === "pending" && (
         <div className="space-y-2">

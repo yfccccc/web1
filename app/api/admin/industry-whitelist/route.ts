@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
   const category = searchParams.get("category")?.trim();
   const weight = Number(searchParams.get("weight") || 0);
   const q = searchParams.get("q")?.trim();
+  const requestedPage = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(100, Math.max(1, Number.parseInt(searchParams.get("limit") ?? "20", 10) || 20));
 
   const where: Record<string, unknown> = {};
   if (category) where.category = category;
@@ -27,12 +29,17 @@ export async function GET(request: NextRequest) {
     ];
   }
 
+  const total = await prisma.industryWhitelist.count({ where });
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const page = Math.min(requestedPage, totalPages);
   const items = await prisma.industryWhitelist.findMany({
     where,
     orderBy: [{ weight: "desc" }, { word: "asc" }],
+    skip: (page - 1) * limit,
+    take: limit,
   });
 
-  return NextResponse.json({ items });
+  return NextResponse.json({ items, total, page, limit, totalPages });
 }
 
 export async function POST(request: NextRequest) {

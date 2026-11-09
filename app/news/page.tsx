@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { buildNewsPath, getArticleSegment } from "@/lib/share-config";
 import { decodeEscapedUnicode } from "@/lib/text";
 import { getNewsAftermarketConfig, NEWS_AFTERMARKET_SUBCATEGORY } from "@/lib/news-aftermarket";
+import { buildPublishedNewsWhere, buildPublishedNewsSubcategoryWhere } from "@/lib/news-listing";
 
 export const revalidate = 300;
 
@@ -27,10 +28,7 @@ export default async function NewsPage() {
 
   const [articles, subcategoryRows] = await Promise.all([
     prisma.article.findMany({
-      where: {
-        status: "approved",
-        OR: [{ categoryHref: { startsWith: "/news" } }, { subHref: { startsWith: "/news" } }],
-      },
+      where: buildPublishedNewsWhere(),
       orderBy: articleOrderByPinnedLatest,
       take: 8,
       select: { id: true, title: true, slug: true, publishedAt: true, updatedAt: true },
@@ -38,10 +36,7 @@ export default async function NewsPage() {
     Promise.all(
       subcategories.map((sub) =>
         prisma.article.findMany({
-          where: {
-            status: "approved",
-            OR: [{ subHref: sub.href }, { categoryHref: sub.href }],
-          },
+          where: buildPublishedNewsSubcategoryWhere(sub.href),
           orderBy: articleOrderByPinnedLatest,
           take: sub.href === NEWS_AFTERMARKET_SUBCATEGORY.href ? aftermarketConfig.homeDisplayCount : 3,
           select: { id: true, title: true, slug: true },

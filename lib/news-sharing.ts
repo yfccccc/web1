@@ -2,6 +2,7 @@ import { articleOrderByPinnedLatest } from "@/lib/articles";
 import { prisma } from "@/lib/prisma";
 import { resolveUploadedImageShareUrl } from "@/lib/uploaded-image";
 import type { Prisma } from "@prisma/client";
+import { buildPublishedNewsWhere } from "@/lib/news-listing";
 
 export const DEFAULT_NEWS_SHARE_IMAGE = "/api/og/news-default";
 
@@ -28,10 +29,7 @@ export async function findNewsArticleBySegment(segment: string) {
   const candidates = buildNewsSegmentCandidates(segment);
   if (candidates.length === 0) return null;
 
-  const baseWhere: Prisma.ArticleWhereInput = {
-    status: "approved",
-    OR: [{ categoryHref: { startsWith: "/news" } }, { subHref: { startsWith: "/news" } }],
-  };
+  const baseWhere: Prisma.ArticleWhereInput = buildPublishedNewsWhere();
 
   const exactMatch = await prisma.article.findFirst({
     where: {

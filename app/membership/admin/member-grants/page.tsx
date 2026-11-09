@@ -64,9 +64,9 @@ export default function AdminMemberGrantsPage() {
 
   useEffect(() => {
     (async () => {
-      const res = await fetch("/api/admin/members", { credentials: "include", cache: "no-store" });
-      const data = await res.json().catch(() => ([]));
-      const rows = Array.isArray(data) ? data : [];
+      const res = await fetch("/api/admin/members?limit=500", { credentials: "include", cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      const rows = Array.isArray(data.items) ? data.items : [];
       setMembers(rows);
       if (rows[0]?.id) setSelectedId(rows[0].id);
       setLoading(false);

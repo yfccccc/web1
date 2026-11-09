@@ -40,7 +40,7 @@ export default function AdminBrandCreatePage() {
 
   useEffect(() => {
     (async () => {
-      const res = await fetch("/api/admin/enterprises?limit=200&brandBinding=unbound", {
+      const res = await fetch("/api/admin/enterprises?limit=500&brandBinding=unbound", {
         credentials: "include",
         cache: "no-store",
       });

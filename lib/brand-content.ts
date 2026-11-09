@@ -171,6 +171,18 @@ function isSafeHref(value: string) {
   return /^(https?:|mailto:|tel:|\/)/i.test(value);
 }
 
+function isInternalHref(value: string) {
+  const href = String(value ?? "").trim();
+  if (/^\/(?!\/)/.test(href)) return true;
+  if (!/^https?:\/\//i.test(href)) return false;
+  try {
+    const hostname = new URL(href).hostname.toLowerCase();
+    return hostname === "cnzhengmu.com" || hostname === "www.cnzhengmu.com";
+  } catch {
+    return false;
+  }
+}
+
 function normalizeManagedImageSrc(value: string) {
   const input = String(value ?? "").trim();
   if (!input) return "";
@@ -353,7 +365,8 @@ function sanitizeTag(tagName: string, attrText: string) {
     const href = attrs.get("href") ?? "";
     if (!isSafeHref(href)) return "";
     const title = attrs.get("title");
-    return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer nofollow"${title ? ` title="${escapeHtml(title)}"` : ""}>`;
+    const externalAttributes = isInternalHref(href) ? "" : ' target="_blank" rel="noopener noreferrer nofollow"';
+    return `<a href="${escapeHtml(href)}"${externalAttributes}${title ? ` title="${escapeHtml(title)}"` : ""}>`;
   }
 
   if (tag === "img") {

@@ -10,6 +10,8 @@ import {
   normalizeUnifiedSocialCreditCode,
 } from "@/lib/enterprise-verification-validation";
 
+import { submitEnterpriseVerification, getVerificationConflict, ALREADY_VERIFIED } from "@/lib/enterprise-verification-workflow";
+
 const REMOVED_SENSITIVE_FIELD_PLACEHOLDER = "[removed]";
 
 function trimRequired(value: unknown, label: string) {
@@ -92,6 +94,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "未登录" }, { status: 401 });
   }
 
+  const existingEnterprise = await prisma.enterprise.findUnique({
+    where: { memberId: session.sub }, select: { verificationStatus: true },
+  });
+  if (existingEnterprise?.verificationStatus === "approved") {
+    return NextResponse.json({ error: ALREADY_VERIFIED }, { status: 409 });
+  }
+
   const body = await request.json().catch(() => ({}));
 
   let payload: {
@@ -148,29 +157,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: formatError }, { status: 400 });
   }
 
-  const existingPending = await prisma.enterpriseVerification.findFirst({
-    where: { memberId: session.sub, status: "pending" },
-    orderBy: { createdAt: "desc" },
-    select: { id: true },
-  });
-
-  const saved = existingPending
-    ? await prisma.enterpriseVerification.update({
-        where: { id: existingPending.id },
-        data: {
-          ...payload,
-          status: "pending",
-          reviewNote: null,
-          reviewedAt: null,
-          reviewedById: null,
-        },
-      })
-    : await prisma.enterpriseVerification.create({
-        data: {
-          memberId: session.sub,
-          ...payload,
-        },
-      });
+  let saved;
+  try {
+    saved = await submitEnterpriseVerification(prisma, session.sub, payload);
+  } catch (error) {
+    const conflict = getVerificationConflict(error);
+    if (conflict) {
+      return NextResponse.json({ error: conflict.error }, { status: conflict.status });
+    }
+    throw error;
+  }
 
   await writeOperationLog({
     actorId: session.sub,

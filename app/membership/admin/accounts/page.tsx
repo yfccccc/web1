@@ -2,14 +2,27 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+
+const PAGE_SIZE = 20;
 
 type MemberRow = {
   id: string;
+  verificationId?: string | null;
   account: string;
   recoveryEmail?: string | null;
   name: string | null;
   role: string | null;
   memberType: string;
+  phoneMasked?: string | null;
+  phoneVerified?: boolean;
+  accountStatus?: string;
+  realName?: string | null;
+  identityDocumentType?: string | null;
+  identityDocumentNumberMasked?: string | null;
+  identityDocumentsUploaded?: boolean;
+  reviewedAt?: string | null;
+  articleCount?: number;
   canManageMembers: boolean;
   registeredAt: string | null;
   createdAt: string;
@@ -23,6 +36,7 @@ type MemberRow = {
 
 type AdminVisibleRow = {
   id: string;
+  verificationId?: string | null;
   displayName: string;
   recoveryEmail?: string | null;
   role: string | null;
@@ -46,6 +60,14 @@ function formatRegistrationTime(value: string | null | undefined) {
   return `${year}-${month}-${day} ${hours}:${minutes}`;
 }
 
+function accountStatusLabel(value: string | null | undefined) {
+  if (value === "pending_review") return "待审核";
+  if (value === "active") return "已通过";
+  if (value === "rejected") return "已驳回";
+  if (value === "suspended") return "已停用";
+  return value || "--";
+}
+
 export default function AdminAccountsPage() {
   const [role, setRole] = useState<string | null>(null);
   const [canManageMembers, setCanManageMembers] = useState(false);
@@ -65,6 +87,9 @@ export default function AdminAccountsPage() {
   const [newRole, setNewRole] = useState<"ADMIN" | "MEMBER">("MEMBER");
   const [searchDraft, setSearchDraft] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const resultsRef = useRef<HTMLElement | null>(null);
   const shouldScrollToResultsRef = useRef(false);
 
@@ -87,20 +112,23 @@ export default function AdminAccountsPage() {
       setMyRecoveryEmail(typeof recoveryData.recoveryEmail === "string" ? recoveryData.recoveryEmail : "");
     }
 
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
     if (keyword.trim()) params.set("q", keyword.trim());
     const query = params.toString() ? `?${params.toString()}` : "";
     const res = await fetch(`/api/admin/members${query}`, { credentials: "include" });
     if (res.ok) {
       const data = await res.json();
       if (me.role === "SUPER_ADMIN") {
-        setMembers(Array.isArray(data) ? data : []);
+        setMembers(Array.isArray(data.items) ? data.items : []);
       } else {
-        setVisibleRows(Array.isArray(data) ? data : []);
+        setVisibleRows(Array.isArray(data.items) ? data.items : []);
       }
+      setTotal(typeof data.total === "number" ? data.total : 0);
+      setTotalPages(typeof data.totalPages === "number" ? data.totalPages : 1);
+      if (typeof data.page === "number" && data.page !== page) setPage(data.page);
     }
     setLoading(false);
-  }, [keyword]);
+  }, [keyword, page]);
 
   useEffect(() => {
     void load();
@@ -277,6 +305,7 @@ export default function AdminAccountsPage() {
           onSubmit={(e) => {
             e.preventDefault();
             shouldScrollToResultsRef.current = true;
+            setPage(1);
             setKeyword(searchDraft.trim());
           }}
           className="flex flex-col gap-3 md:flex-row md:items-end"
@@ -300,6 +329,7 @@ export default function AdminAccountsPage() {
                 onClick={() => {
                   setKeyword("");
                   setSearchDraft("");
+                  setPage(1);
                 }}
                 className="px-4 py-2 rounded border border-border bg-white text-sm text-primary"
               >
@@ -398,6 +428,9 @@ export default function AdminAccountsPage() {
                     ) : null}
                   {row.recoveryEmail ? <span className="ml-2 text-xs text-muted">找回邮箱：{row.recoveryEmail}</span> : null}
                   <span className="ml-2">（{row.role === "ADMIN" ? "子管理员" : "会员"} / {row.memberType}）</span>
+                  {row.memberType === "enterprise_basic" && (row.verificationId ? (
+                    <Link className="ml-2 apple-inline-link" href={`/membership/admin/enterprise-verifications/${row.verificationId}`}>去审核资质</Link>
+                  ) : <span className="ml-2 text-muted">暂无资质申请</span>)}
                 </li>
               ))}
             </ul>
@@ -446,7 +479,11 @@ export default function AdminAccountsPage() {
                   <th className="text-left py-2">找回邮箱</th>
                   <th className="text-left py-2">角色</th>
                   <th className="text-left py-2">会员类型</th>
+                  <th className="text-left py-2">手机号</th>
+                  <th className="text-left py-2">实名信息</th>
+                  <th className="text-left py-2">审核状态</th>
                   <th className="text-left py-2">注册时间</th>
+                  <th className="text-left py-2">文章数量</th>
                   <th className="text-left py-2">操作</th>
               </tr>
             </thead>
@@ -476,9 +513,66 @@ export default function AdminAccountsPage() {
                   <td className="py-2 pr-4 text-muted">{m.recoveryEmail || "未设置"}</td>
                   <td className="py-2 pr-4 text-muted">{m.role === "SUPER_ADMIN" ? "主管理员" : m.role === "ADMIN" ? "子管理员" : "会员"}</td>
                   <td className="py-2 pr-4 text-muted">{m.memberType}</td>
+                  <td className="py-2 pr-4 text-muted whitespace-nowrap">
+                    <div>{m.phoneMasked || "未填写"}</div>
+                    <div className="text-xs">{m.phoneVerified ? "已验证" : "未验证"}</div>
+                  </td>
+                  <td className="py-2 pr-4 text-muted">
+                    <div>{m.realName || "未填写"}</div>
+                    {m.identityDocumentType || m.identityDocumentNumberMasked || m.identityDocumentsUploaded ? (
+                      <div className="mt-1 text-xs">
+                        <div>
+                          历史证件资料：{m.identityDocumentType || "类型未记录"}
+                          {m.identityDocumentNumberMasked ? ` / ${m.identityDocumentNumberMasked}` : ""}
+                        </div>
+                        {m.identityDocumentsUploaded ? (
+                          <div className="mt-1 flex gap-2">
+                            <a href={`/api/admin/members/${m.id}/identity-documents/front`} target="_blank" rel="noreferrer" className="text-accent hover:underline">证件正面</a>
+                            <a href={`/api/admin/members/${m.id}/identity-documents/back`} target="_blank" rel="noreferrer" className="text-accent hover:underline">证件反面</a>
+                          </div>
+                        ) : (
+                          <div>历史证件资料未完整</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-xs">
+                        {m.memberType === "personal" ? "新注册个人会员不采集身份证件资料" : "无历史证件资料"}
+                      </div>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4 text-muted whitespace-nowrap">
+                    <div>{accountStatusLabel(m.accountStatus)}</div>
+                    {m.reviewedAt ? <div className="text-xs">{formatRegistrationTime(m.reviewedAt)}</div> : null}
+                  </td>
                   <td className="py-2 pr-4 text-muted whitespace-nowrap">{formatRegistrationTime(m.registeredAt)}</td>
+                  <td className="py-2 pr-4 text-muted">{m.articleCount ?? 0}</td>
                   <td className="py-2 pr-4">
-                    <div className="flex gap-3">
+                    <div className="flex flex-wrap gap-3">
+                      {m.memberType === "enterprise_basic" && (m.verificationId ? (
+                        <Link className="apple-inline-link" href={`/membership/admin/enterprise-verifications/${m.verificationId}`}>去审核资质</Link>
+                      ) : <span className="text-xs text-muted">暂无资质申请</span>)}
+                      {m.memberType === "personal" && m.accountStatus === "pending_review" ? (
+                        <>
+                          <button
+                            className="apple-inline-link"
+                            type="button"
+                            onClick={() => {
+                              if (confirm("确认审核通过该个人会员账号？")) void updateMember(m.id, { accountStatus: "active" });
+                            }}
+                          >
+                            审核通过
+                          </button>
+                          <button
+                            className="text-xs text-red-600 hover:underline"
+                            type="button"
+                            onClick={() => {
+                              if (confirm("确认驳回该个人会员账号？")) void updateMember(m.id, { accountStatus: "rejected" });
+                            }}
+                          >
+                            驳回
+                          </button>
+                        </>
+                      ) : null}
                       <button
                         className="apple-inline-link"
                         type="button"
@@ -521,6 +615,7 @@ export default function AdminAccountsPage() {
           </table>
         </section>
       )}
+      <AdminPagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} currentCount={isSuperAdmin ? members.length : visibleRows.length} loading={loading} onPageChange={setPage} />
     </div>
   );
 }

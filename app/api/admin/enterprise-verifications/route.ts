@@ -16,14 +16,19 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
+  const page = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
   const limitRaw = Number(searchParams.get("limit") ?? "50");
   const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, Math.floor(limitRaw))) : 50;
 
   const where = status && ["pending", "approved", "rejected"].includes(status) ? { status } : undefined;
+  const total = await prisma.enterpriseVerification.count({ where });
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const resolvedPage = Math.min(page, totalPages);
 
   const items = await prisma.enterpriseVerification.findMany({
     where,
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    skip: (resolvedPage - 1) * limit,
     take: limit,
     select: {
       id: true,
@@ -62,5 +67,5 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  return NextResponse.json({ items });
+  return NextResponse.json({ items, total, page: resolvedPage, limit, totalPages });
 }

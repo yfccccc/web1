@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Prisma } from "@prisma/client";
 import { StructuredSearch } from "@/components/StructuredSearch";
 import { articleOrderByPinnedLatest } from "@/lib/articles";
+import { buildBrandPublicUrl } from "@/lib/brand-public-url";
 import { prisma } from "@/lib/prisma";
 import { buildNoIndexMetadata } from "@/lib/seo";
 import { buildNewsPath } from "@/lib/share-config";
@@ -155,6 +156,16 @@ export default async function SearchPage({ searchParams }: Props) {
     }),
   ]);
 
+  const brandRecords = brands.length
+    ? await prisma.brand.findMany({
+        where: { slug: { in: brands.map((item) => item.slug) } },
+        select: { slug: true, enterprise: { select: { id: true } } },
+      })
+    : [];
+  const enterpriseIdByBrandSlug = new Map(
+    brandRecords.map((brand) => [brand.slug, brand.enterprise?.id ?? null]),
+  );
+
   const summary = [
     { label: T.news, value: news.length, href: `/news/all?q=${encodedKeyword}` },
     { label: T.standards, value: standards.length, href: `/standards/all?q=${encodedKeyword}` },
@@ -282,7 +293,13 @@ export default async function SearchPage({ searchParams }: Props) {
             <ul className="space-y-3">
               {brands.map((item) => (
                 <li key={item.id} className="rounded-xl border border-border bg-surface-elevated p-3">
-                  <Link href={`/brands/${item.slug || item.id}`} className="font-medium text-primary hover:text-accent">
+                  <Link
+                    href={buildBrandPublicUrl({
+                      slug: item.slug || item.id,
+                      enterpriseId: enterpriseIdByBrandSlug.get(item.slug),
+                    })}
+                    className="font-medium text-primary hover:text-accent"
+                  >
                     {decodeEscapedUnicode(item.title)}
                   </Link>
                   <p className="mt-1 text-sm text-muted">{excerpt(decodeEscapedUnicode(item.excerpt ?? ""))}</p>

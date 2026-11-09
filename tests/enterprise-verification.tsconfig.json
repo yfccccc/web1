@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": [
+    "../next-env.d.ts",
+    "../lib/enterprise-verification-workflow.ts",
+    "../app/api/admin/enterprise-verifications/[id]/route.ts",
+    "../app/api/member/enterprise-verification/route.ts",
+    "../app/api/admin/members/route.ts",
+    "../app/membership/admin/accounts/page.tsx",
+    "../app/membership/admin/enterprise-verifications/[id]/page.tsx",
+    "../app/membership/admin/enterprise-verifications/components/VerificationCard.tsx"
+  ],
+  "exclude": ["../node_modules", "../reports", "../artifacts", "../.release-worktrees"]
+}

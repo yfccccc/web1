@@ -1,4 +1,5 @@
 ﻿import { containsSuspiciousText, htmlToPlainText, normalizePlainTextField, toSummaryText } from "./brand-content";
+import { buildBrandPublicUrl } from "./brand-public-url";
 import { prisma } from "./prisma";
 
 const brandCardSelect = {
@@ -239,6 +240,7 @@ function normalizeBrand(record: BrandRecord) {
   return {
     ...record,
     enterprise,
+    publicUrl: buildBrandPublicUrl({ slug: record.slug, enterpriseId: enterprise?.id }),
     memberType,
     enterpriseName,
     logoUrl: enterprise?.logoUrl || record.logoUrl || null,
@@ -335,6 +337,7 @@ export async function getHomepageBrandDirectoryList(limit = 8) {
     return {
       id: record.id,
       slug: record.slug,
+      publicUrl: buildBrandPublicUrl({ slug: record.slug, enterpriseId: record.enterprise?.id }),
       enterpriseName,
       headline:
         cleanDisplayField(record.enterprise?.positioning || record.tagline || record.positioning) ||

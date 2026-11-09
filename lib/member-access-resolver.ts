@@ -2,6 +2,7 @@ import { MEMBER_PUBLISH_CATEGORY_OPTIONS } from "@/lib/content-taxonomy";
 import { getMemberGrantSettings, type GrantFeatureKey, type MemberGrantSettings } from "@/lib/member-grants";
 import { getMembershipRule, type LegacyMemberType, type MembershipRule } from "@/lib/membership-rules";
 import { prisma } from "@/lib/prisma";
+import { RESTRICTED_MEMBER_PUBLICATION, isRestrictedMemberType } from "@/lib/membership-publishing";
 
 export type EffectiveMemberFeatureAccess = Record<GrantFeatureKey, boolean>;
 
@@ -124,11 +125,14 @@ export function buildEffectiveMemberAccessFromSources(
   usageMaps: UsageMaps,
   year: number
 ): EffectiveMemberAccess {
+  const restrictedRule = isRestrictedMemberType(memberType) ? RESTRICTED_MEMBER_PUBLICATION[memberType] : null;
   const defaultFeatures = getDefaultFeatureAccess(membershipRule);
   const grantActive = isGrantActive(grants, new Date());
 
   const categories = MEMBER_PUBLISH_CATEGORY_OPTIONS.map((category) => {
-    const defaultCategoryEnabled = membershipRule.publishCategoryHrefs.includes(category.href);
+    const defaultCategoryEnabled = restrictedRule
+      ? category.href === restrictedRule.categoryHref
+      : membershipRule.publishCategoryHrefs.includes(category.href);
     const defaultCategoryLimit = getDefaultCategoryLimit(membershipRule, category.href);
     const categoryGrant = grants.categories[category.href];
     const categoryEnabledOverride = grantActive ? categoryGrant?.enabled : null;
@@ -137,11 +141,17 @@ export function buildEffectiveMemberAccessFromSources(
     const subcategories = category.subs.map((sub) => {
       const subGrant = categoryGrant?.subcategories[sub.href];
       const defaultSubEnabled = defaultCategoryEnabled;
-      const enabled =
+      const enabled = restrictedRule
+        ? category.href === restrictedRule.categoryHref && sub.href === restrictedRule.subHref
+        :
         typeof (grantActive ? subGrant?.enabled : null) === "boolean"
           ? Boolean(subGrant?.enabled)
           : defaultSubEnabled;
-      const annualLimit = (grantActive ? subGrant?.annualLimit : null) ?? null;
+      const annualLimit = restrictedRule
+        ? category.href === restrictedRule.categoryHref && sub.href === restrictedRule.subHref
+          ? restrictedRule.annualLimit
+          : null
+        : (grantActive ? subGrant?.annualLimit : null) ?? null;
       const usedCount = usageMaps.subcategoryCounts.get(`${category.href}::${sub.href}`) ?? 0;
       return {
         href: sub.href,
@@ -158,7 +168,9 @@ export function buildEffectiveMemberAccessFromSources(
       typeof categoryEnabledOverride === "boolean"
         ? categoryEnabledOverride || hasEnabledSubcategory
         : defaultCategoryEnabled || hasEnabledSubcategory;
-    const annualLimit = categoryLimitOverride ?? defaultCategoryLimit;
+    const annualLimit = restrictedRule && category.href === restrictedRule.categoryHref
+      ? restrictedRule.annualLimit
+      : categoryLimitOverride ?? defaultCategoryLimit;
     const usedCount = usageMaps.categoryCounts.get(category.href) ?? 0;
 
     return {

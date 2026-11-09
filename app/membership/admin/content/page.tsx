@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 import { ADMIN_PUBLISH_CATEGORY_OPTIONS, CONTENT_TAB_DEFS, resolveTabKeyFromHref, type ContentTabKey } from "@/lib/content-taxonomy";
 import { suggestTagsFromText } from "@/lib/tag-suggest";
 import {
@@ -215,6 +216,9 @@ type ChangeRequestItem = {
 };
 
 type ManageSourceFilter = "all" | "manual" | "ai_generated" | "imported";
+type ManageStatusFilter = "all" | Status;
+
+const MANAGE_PAGE_SIZE = 20;
 
 function parseManageSourceFilter(raw: string | null): ManageSourceFilter {
   return raw === "manual" || raw === "ai_generated" || raw === "imported" ? raw : "all";
@@ -270,6 +274,14 @@ function buildPreviewHref(
 
 function buildAutoExcerpt(text: string) {
   return previewText(text, 120);
+}
+
+function parseManageStatusFilter(raw: string | null): ManageStatusFilter {
+  return raw === "draft" || raw === "pending" || raw === "approved" || raw === "rejected" ? raw : "all";
+}
+
+function parsePositivePage(raw: string | null) {
+  return Math.max(1, Number.parseInt(raw ?? "1", 10) || 1);
 }
 
 function isRichTextArticleTab(tab: ContentTabKey) {
@@ -351,6 +363,10 @@ export default function AdminContentPage() {
   const tab = parseTab(searchParams.get("tab"));
   const searchQuery = searchParams.get("q")?.trim() ?? "";
   const sourceTypeFilter = parseManageSourceFilter(searchParams.get("sourceType"));
+  const statusFilter = parseManageStatusFilter(searchParams.get("status"));
+  const subHrefFilter = searchParams.get("subHref")?.trim() ?? "";
+  const managePage = parsePositivePage(searchParams.get("page"));
+  const reviewPage = parsePositivePage(searchParams.get("reviewPage"));
 
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -369,7 +385,12 @@ export default function AdminContentPage() {
   const [cropTarget, setCropTarget] = useState<"publish" | "edit" | null>(null);
 
   const [items, setItems] = useState<ArticleItem[]>([]);
+  const [listTotal, setListTotal] = useState(0);
+  const [listTotalPages, setListTotalPages] = useState(1);
+  const [listLoading, setListLoading] = useState(false);
   const [pendingItems, setPendingItems] = useState<ArticleItem[]>([]);
+  const [pendingTotal, setPendingTotal] = useState(0);
+  const [pendingTotalPages, setPendingTotalPages] = useState(1);
   const [pendingChanges, setPendingChanges] = useState<ChangeRequestItem[]>([]);
   const [enterpriseOptions, setEnterpriseOptions] = useState<EnterpriseOption[]>([]);
 
@@ -751,31 +772,55 @@ export default function AdminContentPage() {
   }, []);
 
   const loadEnterpriseOptions = useCallback(async () => {
-    const res = await fetch("/api/admin/members", { credentials: "include", cache: "no-store" });
-    const data = await res.json().catch(() => []);
-    setEnterpriseOptions(normalizeEnterpriseOptions(data));
+    const res = await fetch("/api/admin/members?limit=500", { credentials: "include", cache: "no-store" });
+    const data = await res.json().catch(() => ({}));
+    setEnterpriseOptions(normalizeEnterpriseOptions(Array.isArray(data.items) ? data.items : []));
   }, []);
 
   const loadList = useCallback(async () => {
-    const sp = new URLSearchParams({ limit: "100", tab });
+    setListLoading(true);
+    const sp = new URLSearchParams({ limit: String(MANAGE_PAGE_SIZE), page: String(managePage), tab });
     if (searchQuery) sp.set("q", searchQuery);
     if (sourceTypeFilter !== "all") sp.set("sourceType", sourceTypeFilter);
-    const res = await fetch(`/api/admin/articles?${sp.toString()}`, { credentials: "include", cache: "no-store" });
-    const data = await res.json().catch(() => ({}));
-    setItems(Array.isArray(data.items) ? data.items : []);
-  }, [searchQuery, sourceTypeFilter, tab]);
+    if (statusFilter !== "all") sp.set("status", statusFilter);
+    if (subHrefFilter && subOptions.some((item) => item.href === subHrefFilter)) sp.set("subHref", subHrefFilter);
+    try {
+      const res = await fetch(`/api/admin/articles?${sp.toString()}`, { credentials: "include", cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      setItems(Array.isArray(data.items) ? data.items : []);
+      setListTotal(typeof data.total === "number" ? data.total : 0);
+      setListTotalPages(typeof data.totalPages === "number" ? data.totalPages : 1);
+      if (typeof data.page === "number" && data.page !== managePage) {
+        const nextParams = new URLSearchParams(searchParams.toString());
+        if (data.page <= 1) nextParams.delete("page");
+        else nextParams.set("page", String(data.page));
+        router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false });
+      }
+    } finally {
+      setListLoading(false);
+    }
+  }, [managePage, pathname, router, searchParams, searchQuery, sourceTypeFilter, statusFilter, subHrefFilter, subOptions, tab]);
 
   const loadReview = useCallback(async () => {
-    const sp = new URLSearchParams({ status: "pending", limit: "200", tab });
+    const sp = new URLSearchParams({ status: "pending", limit: String(MANAGE_PAGE_SIZE), page: String(reviewPage), tab });
+    const changeSp = new URLSearchParams({ status: "pending", limit: "100", tab });
     const [a, c] = await Promise.all([
       fetch(`/api/admin/articles?${sp.toString()}`, { credentials: "include", cache: "no-store" }),
-      fetch(`/api/admin/article-change-requests?${sp.toString()}`, { credentials: "include", cache: "no-store" }),
+      fetch(`/api/admin/article-change-requests?${changeSp.toString()}`, { credentials: "include", cache: "no-store" }),
     ]);
     const ad = await a.json().catch(() => ({}));
     const cd = await c.json().catch(() => ({}));
     setPendingItems(Array.isArray(ad.items) ? ad.items : []);
+    setPendingTotal(typeof ad.total === "number" ? ad.total : 0);
+    setPendingTotalPages(typeof ad.totalPages === "number" ? ad.totalPages : 1);
     setPendingChanges(Array.isArray(cd.items) ? cd.items : []);
-  }, [tab]);
+    if (typeof ad.page === "number" && ad.page !== reviewPage) {
+      const nextParams = new URLSearchParams(searchParams.toString());
+      if (ad.page <= 1) nextParams.delete("reviewPage");
+      else nextParams.set("reviewPage", String(ad.page));
+      router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false });
+    }
+  }, [pathname, reviewPage, router, searchParams, tab]);
 
   useEffect(() => { void loadSession(); }, [loadSession]);
   useEffect(() => {
@@ -1377,6 +1422,7 @@ export default function AdminContentPage() {
     else nextParams.delete("q");
     if (manageSourceTypeDraft !== "all") nextParams.set("sourceType", manageSourceTypeDraft);
     else nextParams.delete("sourceType");
+    nextParams.delete("page");
     const nextUrl = nextParams.toString() ? `${pathname}?${nextParams.toString()}` : pathname;
     router.replace(nextUrl, { scroll: false });
   }
@@ -1387,8 +1433,33 @@ export default function AdminContentPage() {
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.delete("q");
     nextParams.delete("sourceType");
+    nextParams.delete("page");
     const nextUrl = nextParams.toString() ? `${pathname}?${nextParams.toString()}` : pathname;
     router.replace(nextUrl, { scroll: false });
+  }
+
+  function updateManageFilter(key: "status" | "subHref", value: string) {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    if (value && value !== "all") nextParams.set(key, value);
+    else nextParams.delete(key);
+    nextParams.delete("page");
+    router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false });
+  }
+
+  function goToManagePage(nextPage: number) {
+    const safePage = Math.min(listTotalPages, Math.max(1, nextPage));
+    const nextParams = new URLSearchParams(searchParams.toString());
+    if (safePage <= 1) nextParams.delete("page");
+    else nextParams.set("page", String(safePage));
+    router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false });
+  }
+
+  function goToReviewPage(nextPage: number) {
+    const safePage = Math.min(pendingTotalPages, Math.max(1, nextPage));
+    const nextParams = new URLSearchParams(searchParams.toString());
+    if (safePage <= 1) nextParams.delete("reviewPage");
+    else nextParams.set("reviewPage", String(safePage));
+    router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false });
   }
 
   if (loading) return <p className="text-muted">加载中...</p>;
@@ -1789,6 +1860,42 @@ export default function AdminContentPage() {
             </div>
           </form>
 
+          <div className="flex flex-col gap-3 rounded-[20px] border border-border bg-white/75 p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                { value: "all", label: "全部" },
+                { value: "approved", label: "已发布" },
+                { value: "pending", label: "待审核" },
+                { value: "draft", label: "草稿" },
+                { value: "rejected", label: "已驳回" },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => updateManageFilter("status", option.value)}
+                  className={`rounded-full border px-3.5 py-2 text-sm ${statusFilter === option.value ? "border-accent bg-white text-accent" : "border-border text-muted hover:text-primary"}`}
+                >
+                  {option.label}
+                </button>
+              ))}
+              {subOptions.length > 0 ? (
+                <select
+                  value={subHrefFilter}
+                  onChange={(event) => updateManageFilter("subHref", event.target.value)}
+                  className="rounded-full border border-border bg-white px-4 py-2 text-sm text-primary"
+                >
+                  <option value="">全部栏目</option>
+                  {subOptions.map((option) => (
+                    <option key={option.href} value={option.href}>{option.label}</option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
+            <p className="text-sm text-muted">
+              共 <span className="font-semibold text-primary">{listTotal}</span> 条，第 {managePage} / {listTotalPages} 页，每页 {MANAGE_PAGE_SIZE} 条
+            </p>
+          </div>
+
           <ManageContentList
             items={manageItems}
             canEdit={canEdit}
@@ -1797,20 +1904,25 @@ export default function AdminContentPage() {
             onDelete={(id) => void removeItem(id)}
             highlightedItemId={highlightedItemId}
           />
+
+          <AdminPagination page={managePage} totalPages={listTotalPages} total={listTotal} pageSize={MANAGE_PAGE_SIZE} currentCount={manageItems.length} loading={listLoading} onPageChange={goToManagePage} />
         </section>
       )}
 
       {mode === "review" && (
-        <ReviewPanels
-          tab={tab}
-          pendingItems={pendingItems}
-          pendingChanges={pendingChanges}
-          parseStandardStructuredHtml={parseStandardStructuredHtml}
-          onEditArticle={openEdit}
-          onReviewArticle={(id, status) => void reviewArticle(id, status)}
-          onEditChange={openEditFromChange}
-          onReviewChange={(id, status) => void reviewChange(id, status)}
-        />
+        <section className="space-y-4">
+          <ReviewPanels
+            tab={tab}
+            pendingItems={pendingItems}
+            pendingChanges={pendingChanges}
+            parseStandardStructuredHtml={parseStandardStructuredHtml}
+            onEditArticle={openEdit}
+            onReviewArticle={(id, status) => void reviewArticle(id, status)}
+            onEditChange={openEditFromChange}
+            onReviewChange={(id, status) => void reviewChange(id, status)}
+          />
+          <AdminPagination page={reviewPage} totalPages={pendingTotalPages} total={pendingTotal} pageSize={MANAGE_PAGE_SIZE} currentCount={pendingItems.length} onPageChange={goToReviewPage} />
+        </section>
       )}
 
       {editingId && (

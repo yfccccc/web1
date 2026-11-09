@@ -74,6 +74,7 @@ export async function PATCH(
     canEditOwnContent,
     canEditMemberContent,
     canEditAllContent,
+    accountStatus,
   } = body;
 
   const data: {
@@ -94,7 +95,18 @@ export async function PATCH(
     canEditOwnContent?: boolean;
     canEditMemberContent?: boolean;
     canEditAllContent?: boolean;
+    accountStatus?: string;
+    reviewedAt?: Date | null;
+    reviewedById?: string | null;
   } = {};
+
+  if (typeof accountStatus === "string" && ["pending_review", "active", "rejected", "suspended"].includes(accountStatus)) {
+    data.accountStatus = accountStatus;
+    if (accountStatus !== "pending_review") {
+      data.reviewedAt = new Date();
+      data.reviewedById = session.sub;
+    }
+  }
 
   const accountValue = typeof account === "string" ? account : typeof email === "string" ? email : "";
   if (typeof accountValue === "string" && accountValue.trim()) {

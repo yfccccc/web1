@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import dictionaryLegacyAliasMap from "@/scripts/output/dictionary-legacy-alias-map.json";
 
 const LEGACY_SITE_URL = "https://jiu.cnzhengmu.com";
 const WWW_HOST = "www.cnzhengmu.com";
 const PRIMARY_HOST = "cnzhengmu.com";
+const DICTIONARY_LEGACY_ALIAS_MAP = dictionaryLegacyAliasMap as Record<string, string>;
 
 const SHOW_ROUTE_MAP: Record<string, (id: string) => string> = {
   news: (id) => `/news/${encodeURIComponent(id)}`,
@@ -14,8 +16,21 @@ function isValidId(value: string | null) {
   return !!value && /^[0-9A-Za-z_-]+$/.test(value);
 }
 
+function decodePathname(pathname: string) {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return pathname;
+  }
+}
+
 export function middleware(request: NextRequest) {
   const { nextUrl } = request;
+
+  const dictionaryAliasTarget = DICTIONARY_LEGACY_ALIAS_MAP[decodePathname(nextUrl.pathname)];
+  if (dictionaryAliasTarget) {
+    return NextResponse.redirect(new URL(dictionaryAliasTarget, `https://${PRIMARY_HOST}`), 301);
+  }
 
   if (nextUrl.hostname === WWW_HOST) {
     const target = nextUrl.clone();

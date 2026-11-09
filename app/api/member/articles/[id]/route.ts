@@ -5,6 +5,7 @@ import { normalizeRichTextField } from "@/lib/brand-content";
 import { findDuplicateArticleByTitle, normalizeArticleTitle } from "@/lib/article-title";
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
 import { revalidateBuyingArticlePaths } from "@/lib/buying-summary";
+import { RESTRICTED_MEMBER_PUBLICATION, isRestrictedMemberType } from "@/lib/membership-publishing";
 
 export const dynamic = "force-dynamic";
 
@@ -44,12 +45,18 @@ export async function PATCH(
 
   const body = await request.json().catch(() => ({}));
   const data: Record<string, unknown> = {};
+  const restrictedRule = isRestrictedMemberType(session.memberType) ? RESTRICTED_MEMBER_PUBLICATION[session.memberType] : null;
   if (typeof body.title === "string") data.title = normalizeArticleTitle(body.title);
   if (typeof body.excerpt === "string") data.excerpt = body.excerpt.trim() || null;
   if (typeof body.content === "string") data.content = normalizeRichTextField(body.content) ?? "";
   if (typeof body.coverImage === "string") data.coverImage = body.coverImage.trim() || null;
-  if (typeof body.subHref === "string") data.subHref = body.subHref.trim() || null;
-  if (typeof body.categoryHref === "string") data.categoryHref = body.categoryHref.trim() || null;
+  if (restrictedRule) {
+    data.categoryHref = restrictedRule.categoryHref;
+    data.subHref = restrictedRule.subHref;
+  } else {
+    if (typeof body.subHref === "string") data.subHref = body.subHref.trim() || null;
+    if (typeof body.categoryHref === "string") data.categoryHref = body.categoryHref.trim() || null;
+  }
   if (typeof body.isPinned === "boolean" && (session.role === "SUPER_ADMIN" || session.role === "ADMIN")) {
     data.isPinned = body.isPinned;
   }

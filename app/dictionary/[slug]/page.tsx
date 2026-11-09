@@ -69,10 +69,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const article = await prisma.article.findFirst({
     where: {
       status: "approved",
-      AND: [
-        { OR: [{ categoryHref: { startsWith: "/dictionary" } }, { subHref: { startsWith: "/dictionary" } }] },
-        { OR: [{ slug: s }, { title: s }, { slug: { contains: s } }, { title: { contains: s } }] },
-      ],
+      slug: s,
+      OR: [{ categoryHref: { startsWith: "/dictionary" } }, { subHref: { startsWith: "/dictionary" } }],
     },
     select: { title: true, slug: true, excerpt: true, content: true, faqJson: true, coverImage: true },
   });
@@ -210,10 +208,8 @@ export default async function TermPage({ params }: Props) {
   const article = await prisma.article.findFirst({
     where: {
       status: "approved",
-      AND: [
-        { OR: [{ categoryHref: { startsWith: "/dictionary" } }, { subHref: { startsWith: "/dictionary" } }] },
-        { OR: [{ slug: s }, { title: s }, { slug: { contains: s } }, { title: { contains: s } }] },
-      ],
+      slug: s,
+      OR: [{ categoryHref: { startsWith: "/dictionary" } }, { subHref: { startsWith: "/dictionary" } }],
     },
   });
 

@@ -92,6 +92,21 @@ model Member {
   email               String             @unique
   recoveryEmail       String?
   phone               String?
+  phoneVerified       Boolean            @default(false)
+  accountStatus       String             @default("active") // pending_review | active | rejected | suspended
+  realName            String?
+  identityDocumentType String?
+  identityDocumentNumber String?
+  identityDocumentFrontPath String?
+  identityDocumentBackPath String?
+  region              String?
+  occupationType      String?
+  companyOrOrganization String?
+  applicationReason   String?
+  agreedToTermsAt     DateTime?
+  agreedToPrivacyAt   DateTime?
+  reviewedAt          DateTime?
+  reviewedById        String?
   role                String?
   membershipLevel     String?
   memberType          String             @default("personal") // enterprise_basic | personal | enterprise_advanced
@@ -134,8 +149,25 @@ model Member {
   @@index([memberTypeExpiresAt])
   @@index([recoveryEmail])
   @@index([phone])
+  @@index([accountStatus])
   @@index([passwordResetTokenHash])
   @@map("members")
+}
+
+model SmsVerification {
+  id           String   @id @default(cuid())
+  phone        String
+  purpose      String
+  codeHash     String
+  expiresAt    DateTime
+  attemptCount Int      @default(0)
+  verifiedAt   DateTime?
+  usedAt       DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([phone, purpose, createdAt])
+  @@index([expiresAt])
+  @@map("sms_verifications")
 }
 
 model PasswordRecoveryRequest {
@@ -173,7 +205,7 @@ model Enterprise {
   contactPerson   String?
   website         String?
   address         String?
-  licenseCode     String?
+  licenseCode     String?  @unique
   foundedAt       String?
   registeredCapital String?
   verificationStatus String @default("approved") // pending | approved | rejected

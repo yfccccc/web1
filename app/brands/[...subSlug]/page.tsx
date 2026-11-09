@@ -6,6 +6,7 @@ import { buildPageMetadata } from "@/lib/seo";
 import { composeIntentTitle } from "@/lib/compose-intent-title";
 import { RichContent } from "@/components/RichContent";
 import { getBrandDirectoryBySlug } from "@/lib/brand-directory";
+import { buildBrandPublicUrl, getLegacyBrandEnterpriseId, safeDecodeUrlSegment } from "@/lib/brand-public-url";
 import { parseBrandStructuredHtml } from "@/lib/brand-structured";
 import { previewText } from "@/lib/text";
 import { resolveUploadedImageUrl } from "@/lib/uploaded-image";
@@ -27,17 +28,7 @@ function normalizeMarketTitle(input?: string | null) {
 }
 
 function normalizeSegment(raw: string) {
-  let value = (raw || "").trim();
-  for (let i = 0; i < 2; i += 1) {
-    try {
-      const decoded = decodeURIComponent(value);
-      if (decoded === value) break;
-      value = decoded;
-    } catch {
-      break;
-    }
-  }
-  return value.trim();
+  return safeDecodeUrlSegment(raw);
 }
 
 async function findBrandBySegment(segment: string) {
@@ -131,7 +122,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         suffix: "怎么样？整木定制品牌口碑与产品解析｜整木网",
       }),
       description: brand.summary,
-      path: `/brands/${brand.slug}`,
+      path: brand.publicUrl,
       absoluteTitle: true,
     });
   }
@@ -145,7 +136,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         suffix: "怎么样？整木定制品牌口碑与产品解析｜整木网",
       }),
       description: "该品牌已关联企业资料，可查看企业详情、联系方式和展示内容。",
-      path: `/enterprise/${enterprise.id}`,
+      path: buildBrandPublicUrl({ slug: segment, enterpriseId: enterprise.id }),
       absoluteTitle: true,
     });
   }
@@ -159,7 +150,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       suffix: "｜整木品牌口碑解析｜整木网",
     }),
     description: previewText(article.excerpt ?? article.content, 160),
-    path: `/brands/${article.slug}`,
+    path: buildBrandPublicUrl({ slug: article.slug }),
     type: "article",
     image: article.coverImage ? resolveUploadedImageUrl(article.coverImage) : undefined,
     imageAlt: article.title,
@@ -184,9 +175,14 @@ export default async function BrandDetailPage({ params }: Props) {
     redirect("/brands/buying");
   }
 
+  const legacyEnterpriseId = getLegacyBrandEnterpriseId(segment);
+  if (legacyEnterpriseId) {
+    permanentRedirect(buildBrandPublicUrl({ slug: segment, enterpriseId: legacyEnterpriseId }));
+  }
+
   const brand = await findBrandBySegment(segment);
   if (brand?.enterprise) {
-    redirect(`/enterprise/${brand.enterprise.id}`);
+    permanentRedirect(brand.publicUrl);
   }
   if (brand) {
     notFound();
@@ -194,14 +190,14 @@ export default async function BrandDetailPage({ params }: Props) {
 
   const enterprise = await findEnterpriseBySegment(segment);
   if (enterprise) {
-    redirect(`/enterprise/${enterprise.id}`);
+    permanentRedirect(buildBrandPublicUrl({ slug: segment, enterpriseId: enterprise.id }));
   }
 
   const article = await findBrandArticleBySegment(segment);
   if (!article) notFound();
 
   if (segment !== article.slug) {
-    permanentRedirect(`/brands/${encodeURIComponent(article.slug)}`);
+    permanentRedirect(buildBrandPublicUrl({ slug: article.slug }));
   }
 
   const structured = parseBrandStructuredHtml(article.content);

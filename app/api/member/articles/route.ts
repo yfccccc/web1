@@ -23,6 +23,7 @@ import {
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
 import { validateInternalLinks } from "@/lib/article-links";
 import { revalidateBuyingArticlePaths } from "@/lib/buying-summary";
+import { assertRestrictedMemberCanSubmit, RESTRICTED_MEMBER_PUBLICATION, isRestrictedMemberType } from "@/lib/membership-publishing";
 
 const MEMBER_CONTENT_STATUSES = new Set(["draft", "pending", "approved", "rejected"]);
 
@@ -84,6 +85,14 @@ export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
   const memberAccess = await getEffectiveMemberAccessForMember(session.sub, session.memberType);
+  const restrictedSubmitError = await assertRestrictedMemberCanSubmit({
+    memberId: session.sub,
+    memberType: session.memberType,
+    role: session.role,
+    accountStatus: session.accountStatus,
+    phoneVerified: session.phoneVerified,
+  });
+  if (restrictedSubmitError) return NextResponse.json({ error: restrictedSubmitError }, { status: 403 });
   const membershipRule = memberAccess.membershipRule;
 
   const reviewRequired = await isContentReviewRequired();
@@ -116,8 +125,10 @@ export async function POST(request: NextRequest) {
     isPinned,
   } = body;
 
-  const categoryHrefTrim =
+  const requestedCategoryHref =
     typeof categoryHref === "string" ? categoryHref.trim() : "";
+  const restrictedRule = isRestrictedMemberType(session.memberType) ? RESTRICTED_MEMBER_PUBLICATION[session.memberType] : null;
+  const categoryHrefTrim = restrictedRule ? restrictedRule.categoryHref : requestedCategoryHref;
   if (!MEMBER_ALLOWED_CATEGORY_HREFS.has(categoryHrefTrim)) {
     return NextResponse.json({ error: "栏目非法或不支持投稿" }, { status: 400 });
   }
@@ -128,7 +139,7 @@ export async function POST(request: NextRequest) {
   }
 
   const categoryDef = MEMBER_PUBLISH_CATEGORY_OPTIONS.find((item) => item.href === categoryHrefTrim);
-  const rawSubHref = typeof subHref === "string" ? subHref.trim() : "";
+  const rawSubHref = restrictedRule ? restrictedRule.subHref : typeof subHref === "string" ? subHref.trim() : "";
   const normalizedSyncToMainSite = syncToMainSite === true;
   const memberEnterprise = await prisma.enterprise.findUnique({
     where: { memberId: session.sub },

@@ -14,7 +14,12 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
+  const requestedPage = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(100, Math.max(1, Number.parseInt(searchParams.get("limit") ?? "20", 10) || 20));
   const where = status && ["draft", "pending", "approved", "rejected"].includes(status) ? { status } : {};
+  const total = await prisma.standardFeedback.count({ where });
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const page = Math.min(requestedPage, totalPages);
 
   const items = await prisma.standardFeedback.findMany({
     where,
@@ -23,8 +28,9 @@ export async function GET(request: NextRequest) {
       member: { select: { id: true, email: true, name: true, memberType: true } },
       standard: { select: { id: true, title: true, code: true } },
     },
-    take: 200,
+    skip: (page - 1) * limit,
+    take: limit,
   });
 
-  return NextResponse.json({ items, total: items.length });
+  return NextResponse.json({ items, total, page, limit, totalPages });
 }

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { articleOrderByPinnedLatest, articleOrderByPinnedOldest } from "@/lib/articles";
 import { buildNewsPath, getArticleSegment } from "@/lib/share-config";
 import { decodeEscapedUnicode } from "@/lib/text";
-import { NEWS_AFTERMARKET_SUBCATEGORY } from "@/lib/news-aftermarket";
+import { buildPublishedNewsWhere, NEWS_SUBCATEGORIES } from "@/lib/news-listing";
 
 export const revalidate = 300;
 export const dynamic = "force-dynamic";
@@ -26,12 +26,8 @@ type Props = {
 const PAGE_SIZE = 20;
 const SUB_OPTIONS = [
   { value: "", label: "全部" },
-  { value: "/news/trends", label: "行业趋势" },
-  { value: "/news/enterprise", label: "企业动态" },
-  { value: "/news/tech", label: "技术发展" },
-  { value: "/news/events", label: "行业活动" },
-  { value: NEWS_AFTERMARKET_SUBCATEGORY.href, label: NEWS_AFTERMARKET_SUBCATEGORY.label },
-] as const;
+  ...NEWS_SUBCATEGORIES.map((item) => ({ value: item.href, label: item.title })),
+];
 
 type RangeKey = "" | "7d" | "30d" | "year";
 type SortKey = "latest" | "oldest";
@@ -88,12 +84,7 @@ function getActiveSortLabel(value: SortKey) {
 }
 
 function getNewsSectionLabel(href?: string | null) {
-  if (href === "/news/trends") return "行业趋势";
-  if (href === "/news/enterprise") return "企业动态";
-  if (href === "/news/tech") return "技术发展";
-  if (href === "/news/events") return "行业活动";
-  if (href === NEWS_AFTERMARKET_SUBCATEGORY.href) return NEWS_AFTERMARKET_SUBCATEGORY.label;
-  return "资讯";
+  return NEWS_SUBCATEGORIES.find((item) => item.href === href)?.title ?? "资讯";
 }
 
 export default async function NewsAllPage({ searchParams }: Props) {
@@ -104,8 +95,7 @@ export default async function NewsAllPage({ searchParams }: Props) {
   const sort = (params.sort === "oldest" ? "oldest" : "latest") as SortKey;
   const advanced = params.advanced === "1";
   const forceSearchPage = params.search === "1";
-  const page = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
-  const skip = (page - 1) * PAGE_SIZE;
+  const requestedPage = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
 
   const matchedSubSlug = SUB_OPTIONS.find((item) => item.value === sub)?.value?.replace("/news/", "") ?? null;
   const hasOnlySubcategoryFilter =
@@ -117,7 +107,7 @@ export default async function NewsAllPage({ searchParams }: Props) {
     !(params.end ?? "").trim() &&
     !range &&
     sort === "latest" &&
-    page === 1;
+    requestedPage === 1;
 
   if (hasOnlySubcategoryFilter && matchedSubSlug) {
     redirect(`/news/${matchedSubSlug}`);
@@ -129,10 +119,7 @@ export default async function NewsAllPage({ searchParams }: Props) {
   const start = explicitStart ?? quickRange?.start ?? null;
   const end = explicitEnd ?? quickRange?.end ?? null;
 
-  const newsFilter: Record<string, unknown> = {
-    status: "approved",
-    OR: [{ categoryHref: { startsWith: "/news" } }, { subHref: { startsWith: "/news" } }],
-  };
+  const newsFilter = buildPublishedNewsWhere();
 
   const andConds: Record<string, unknown>[] = [];
   if (q) {
@@ -165,11 +152,13 @@ export default async function NewsAllPage({ searchParams }: Props) {
 
   const where = andConds.length > 0 ? { AND: [newsFilter, ...andConds] } : newsFilter;
 
-  const [items, total] = await Promise.all([
-    prisma.article.findMany({
+  const total = await prisma.article.count({ where });
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const page = Math.min(requestedPage, totalPages);
+  const items = await prisma.article.findMany({
       where,
       orderBy: sort === "oldest" ? articleOrderByPinnedOldest : articleOrderByPinnedLatest,
-      skip,
+      skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       select: {
         id: true,
@@ -180,11 +169,7 @@ export default async function NewsAllPage({ searchParams }: Props) {
         publishedAt: true,
         updatedAt: true,
       },
-    }),
-    prisma.article.count({ where }),
-  ]);
-
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    });
   const activeSubLabel = getActiveSubLabel(sub);
   const activeRangeLabel = getActiveRangeLabel(range);
   const activeSortLabel = getActiveSortLabel(sort);

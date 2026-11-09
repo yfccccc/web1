@@ -5,12 +5,14 @@ export const articleOrderByPinnedLatest: Prisma.ArticleOrderByWithRelationInput[
   { isPinned: "desc" },
   { publishedAt: "desc" },
   { updatedAt: "desc" },
+  { id: "desc" },
 ];
 
 export const articleOrderByPinnedOldest: Prisma.ArticleOrderByWithRelationInput[] = [
   { isPinned: "desc" },
   { publishedAt: "asc" },
   { updatedAt: "asc" },
+  { id: "asc" },
 ];
 
 export const articleOrderByPinnedPopular: Prisma.ArticleOrderByWithRelationInput[] = [
@@ -18,6 +20,7 @@ export const articleOrderByPinnedPopular: Prisma.ArticleOrderByWithRelationInput
   { viewCount: "desc" },
   { publishedAt: "desc" },
   { updatedAt: "desc" },
+  { id: "desc" },
 ];
 
 export async function getLatestPublishedArticles(limit = 6) {

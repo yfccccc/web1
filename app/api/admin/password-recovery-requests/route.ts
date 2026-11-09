@@ -13,26 +13,32 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status")?.trim();
   const q = searchParams.get("q")?.trim();
+  const requestedPage = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(100, Math.max(1, Number.parseInt(searchParams.get("limit") ?? "20", 10) || 20));
+  const where = {
+    ...(status && ["pending", "processing", "sent", "resolved", "rejected"].includes(status)
+      ? { status }
+      : {}),
+    ...(q
+      ? {
+          OR: [
+            { account: { contains: q, mode: "insensitive" as const } },
+            { requestNote: { contains: q, mode: "insensitive" as const } },
+            { contactInfo: { contains: q, mode: "insensitive" as const } },
+            { member: { name: { contains: q, mode: "insensitive" as const } } },
+            { member: { enterprise: { companyName: { contains: q, mode: "insensitive" as const } } } },
+            { member: { enterprise: { companyShortName: { contains: q, mode: "insensitive" as const } } } },
+            { member: { enterprise: { brand: { name: { contains: q, mode: "insensitive" as const } } } } },
+          ],
+        }
+      : {}),
+  };
+  const total = await prisma.passwordRecoveryRequest.count({ where });
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const page = Math.min(requestedPage, totalPages);
 
   const items = await prisma.passwordRecoveryRequest.findMany({
-    where: {
-      ...(status && ["pending", "processing", "sent", "resolved", "rejected"].includes(status)
-        ? { status }
-        : {}),
-      ...(q
-        ? {
-            OR: [
-              { account: { contains: q, mode: "insensitive" } },
-              { requestNote: { contains: q, mode: "insensitive" } },
-              { contactInfo: { contains: q, mode: "insensitive" } },
-              { member: { name: { contains: q, mode: "insensitive" } } },
-              { member: { enterprise: { companyName: { contains: q, mode: "insensitive" } } } },
-              { member: { enterprise: { companyShortName: { contains: q, mode: "insensitive" } } } },
-              { member: { enterprise: { brand: { name: { contains: q, mode: "insensitive" } } } } },
-            ],
-          }
-        : {}),
-    },
+    where,
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     include: {
       member: {
@@ -67,8 +73,9 @@ export async function GET(request: NextRequest) {
         },
       },
     },
-    take: 300,
+    skip: (page - 1) * limit,
+    take: limit,
   });
 
-  return NextResponse.json({ items });
+  return NextResponse.json({ items, total, page, limit, totalPages });
 }

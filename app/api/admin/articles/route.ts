@@ -54,12 +54,12 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
-  const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") ?? "20", 10)));
-  const skip = (page - 1) * limit;
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") ?? "20", 10) || 20));
 
   const status = searchParams.get("status");
   const categoryHref = searchParams.get("categoryHref");
+  const subHref = searchParams.get("subHref")?.trim();
   const tab = searchParams.get("tab");
   const sourceType = searchParams.get("sourceType");
   const q = searchParams.get("q")?.trim();
@@ -79,6 +79,12 @@ export async function GET(request: NextRequest) {
   const tabWhere = buildContentTabWhere(resolvedTab);
   if (tabWhere) {
     where.AND = [...(Array.isArray(where.AND) ? where.AND : []), tabWhere];
+  }
+  if (subHref) {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : []),
+      { OR: [{ subHref }, { categoryHref: subHref }] },
+    ];
   }
   if (isArticleSourceType(sourceType)) {
     where.sourceType = sourceType;
@@ -124,11 +130,13 @@ export async function GET(request: NextRequest) {
     ];
   }
 
-  const [items, total] = await Promise.all([
-    prisma.article.findMany({
+  const total = await prisma.article.count({ where });
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const resolvedPage = Math.min(page, totalPages);
+  const items = await prisma.article.findMany({
       where,
-      orderBy: [{ isPinned: "desc" }, { publishedAt: "desc" }, { updatedAt: "desc" }],
-      skip,
+      orderBy: [{ isPinned: "desc" }, { publishedAt: "desc" }, { updatedAt: "desc" }, { id: "desc" }],
+      skip: (resolvedPage - 1) * limit,
       take: limit,
       select: {
         id: true,
@@ -173,11 +181,9 @@ export async function GET(request: NextRequest) {
           },
         },
       },
-    }),
-    prisma.article.count({ where }),
-  ]);
+    });
 
-  return NextResponse.json({ items, total, page, limit });
+  return NextResponse.json({ items, total, page: resolvedPage, limit, totalPages });
 }
 
 export async function POST(request: NextRequest) {
@@ -394,6 +400,9 @@ export async function POST(request: NextRequest) {
     });
 
     if (article.status === "approved" && ((article.categoryHref ?? "").startsWith("/news") || (article.subHref ?? "").startsWith("/news"))) {
+      revalidatePath("/news");
+      revalidatePath("/news/all");
+      if (article.subHref) revalidatePath(article.subHref);
       revalidatePath("/sitemap.xml");
     }
 

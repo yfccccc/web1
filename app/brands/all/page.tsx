@@ -91,7 +91,7 @@ function getMemberLabel(memberType: string) {
 }
 
 function BrandCard({ item, featured = false }: { item: BrandCardItem; featured?: boolean }) {
-  const href = `/brands/${item.slug}`;
+  const href = item.publicUrl;
   const logoSize = featured ? 72 : 72;
   const summary = truncateText(item.summary, featured ? 72 : 78);
   const memberLabel = getMemberLabel(item.memberType);
@@ -222,7 +222,7 @@ export default async function BrandsAllPage({ searchParams }: Props) {
       itemListElement: items.slice(0, 12).map((item, index) => ({
         "@type": "ListItem",
         position: index + 1,
-        url: absoluteUrl(`/brands/${item.slug}`),
+        url: absoluteUrl(item.publicUrl),
         name: item.enterpriseName,
       })),
     },

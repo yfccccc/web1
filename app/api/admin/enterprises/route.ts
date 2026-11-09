@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   const brandBinding = searchParams.get("brandBinding")?.trim() ?? "";
   const verificationStatus = searchParams.get("verificationStatus")?.trim() ?? "";
   const page = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
-  const limit = Math.min(200, Math.max(1, Number.parseInt(searchParams.get("limit") ?? "20", 10) || 20));
+  const limit = Math.min(500, Math.max(1, Number.parseInt(searchParams.get("limit") ?? "20", 10) || 20));
   const skip = (page - 1) * limit;
 
   const conditions: Record<string, unknown>[] = [];

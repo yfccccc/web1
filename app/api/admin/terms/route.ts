@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     prisma.term.findMany({ orderBy: { updatedAt: "desc" }, skip, take: limit }),
     prisma.term.count(),
   ]);
-  return NextResponse.json({ items, total, page, limit });
+  return NextResponse.json({ items, total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) });
 }
 
 export async function POST(request: NextRequest) {

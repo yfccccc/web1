@@ -184,10 +184,10 @@ export default function AdminPermissionsPage() {
       return;
     }
 
-    const res = await fetch("/api/admin/members", { credentials: "include" });
+    const res = await fetch("/api/admin/members?limit=500", { credentials: "include" });
     if (res.ok) {
       const data = await res.json();
-      setMembers(Array.isArray(data) ? data : []);
+      setMembers(Array.isArray(data.items) ? data.items : []);
     }
     setLoading(false);
   }

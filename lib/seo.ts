@@ -22,7 +22,18 @@ function resolveConfiguredSiteUrl() {
   try {
     const parsed = new URL(configured);
     if (isPrivateHostname(parsed.hostname)) {
-      return FALLBACK_SITE_URL;
+      const databaseName = (() => {
+        try {
+          return new URL(process.env.DATABASE_URL ?? "").pathname.replace(/^\//, "");
+        } catch {
+          return "";
+        }
+      })();
+      const allowIsolatedTestSite =
+        process.env.RICH_TEXT_TEST_MODE === "1" &&
+        databaseName.endsWith("_test") &&
+        databaseName !== "web1";
+      return allowIsolatedTestSite ? parsed.origin : FALLBACK_SITE_URL;
     }
     return parsed.origin;
   } catch {

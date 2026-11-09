@@ -95,7 +95,7 @@ function ColumnCard({
 function BrandOverviewCard({ item }: { item: DirectoryBrand }) {
   return (
     <Link
-      href={`/brands/${item.slug}`}
+      href={item.publicUrl}
       className="group block"
     >
       <article className="flex h-full min-h-[156px] flex-col rounded-[24px] border border-[rgba(196,182,154,0.26)] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(244,239,231,0.9))] p-4 transition hover:border-[rgba(176,150,103,0.34)] sm:min-h-[252px] sm:rounded-[30px] sm:p-7">

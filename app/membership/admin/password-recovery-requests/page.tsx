@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { InlinePageBackLink } from "@/components/InlinePageBackLink";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+
+const PAGE_SIZE = 20;
 
 type RequestStatus = "pending" | "processing" | "sent" | "resolved" | "rejected";
 
@@ -63,6 +66,9 @@ export default function AdminPasswordRecoveryRequestsPage() {
   const [recoveryEmailDraft, setRecoveryEmailDraft] = useState<Record<string, string>>({});
   const [adminNoteDraft, setAdminNoteDraft] = useState<Record<string, string>>({});
   const [debugResetUrls, setDebugResetUrls] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,6 +87,8 @@ export default function AdminPasswordRecoveryRequestsPage() {
     }
 
     const sp = new URLSearchParams();
+    sp.set("page", String(page));
+    sp.set("limit", String(PAGE_SIZE));
     if (statusFilter) sp.set("status", statusFilter);
     if (keyword.trim()) sp.set("q", keyword.trim());
     const res = await fetch(`/api/admin/password-recovery-requests?${sp.toString()}`, {
@@ -90,6 +98,9 @@ export default function AdminPasswordRecoveryRequestsPage() {
     const data = await res.json().catch(() => ({}));
     const nextItems = Array.isArray(data.items) ? data.items : [];
     setItems(nextItems);
+    setTotal(typeof data.total === "number" ? data.total : 0);
+    setTotalPages(typeof data.totalPages === "number" ? data.totalPages : 1);
+    if (typeof data.page === "number" && data.page !== page) setPage(data.page);
     setRecoveryEmailDraft(
       Object.fromEntries(
         nextItems.map((item: RecoveryRequestItem) => [item.id, item.member?.recoveryEmail ?? item.recoveryEmailSnapshot ?? ""])
@@ -99,7 +110,7 @@ export default function AdminPasswordRecoveryRequestsPage() {
       Object.fromEntries(nextItems.map((item: RecoveryRequestItem) => [item.id, item.adminNote ?? ""]))
     );
     setLoading(false);
-  }, [keyword, statusFilter]);
+  }, [keyword, page, statusFilter]);
 
   useEffect(() => {
     void load();
@@ -166,6 +177,7 @@ export default function AdminPasswordRecoveryRequestsPage() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
+            setPage(1);
             setKeyword(searchDraft.trim());
           }}
           className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto_auto] md:items-end"
@@ -183,7 +195,7 @@ export default function AdminPasswordRecoveryRequestsPage() {
             <span className="text-xs text-muted">状态</span>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as "" | RequestStatus)}
+              onChange={(e) => { setPage(1); setStatusFilter(e.target.value as "" | RequestStatus); }}
               className="rounded border border-border bg-surface px-3 py-2 text-sm"
             >
               {STATUS_OPTIONS.map((item) => (
@@ -202,6 +214,7 @@ export default function AdminPasswordRecoveryRequestsPage() {
               setSearchDraft("");
               setKeyword("");
               setStatusFilter("pending");
+              setPage(1);
             }}
             className="rounded border border-border bg-white px-4 py-2 text-sm text-primary"
           >
@@ -337,6 +350,7 @@ export default function AdminPasswordRecoveryRequestsPage() {
           })
         )}
       </section>
+      <AdminPagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} currentCount={items.length} loading={loading} onPageChange={setPage} />
     </div>
   );
 }

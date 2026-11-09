@@ -24,6 +24,14 @@ function serializeMember(
     name: string | null;
     role: string | null;
     memberType: string;
+    phone: string | null;
+    phoneVerified: boolean;
+    accountStatus: string;
+    realName: string | null;
+    identityDocumentType: string | null;
+    identityDocumentNumber: string | null;
+    identityDocumentFrontPath: string | null;
+    identityDocumentBackPath: string | null;
     memberTypeExpiresAt?: Date | null;
     rankingWeight?: number;
     canPublishWithoutReview: boolean;
@@ -35,7 +43,9 @@ function serializeMember(
     canEditMemberContent: boolean;
     canEditAllContent: boolean;
     registeredAt: Date | null;
+    reviewedAt: Date | null;
     createdAt: Date;
+    _count: { articles: number };
     enterprise?: {
       id: string;
       companyName: string | null;
@@ -44,10 +54,24 @@ function serializeMember(
     } | null;
   }
 ) {
-  const merged = mergeEffectivePermissionFlags(member);
+  const {
+    phone,
+    identityDocumentNumber,
+    identityDocumentFrontPath,
+    identityDocumentBackPath,
+    _count,
+    ...safeMember
+  } = member;
+  const merged = mergeEffectivePermissionFlags(safeMember);
   return {
     ...merged,
     account: member.email,
+    phoneMasked: phone ? phone.replace(/^(\d{3})\d{4}(\d{4})$/, "$1****$2") : null,
+    identityDocumentNumberMasked: identityDocumentNumber
+      ? identityDocumentNumber.replace(/^(.{3}).+(.{4})$/, "$1***********$2")
+      : null,
+    identityDocumentsUploaded: Boolean(identityDocumentFrontPath && identityDocumentBackPath),
+    articleCount: _count.articles,
     recoveryEmail: member.recoveryEmail ?? null,
     registeredAt: member.registeredAt ? member.registeredAt.toISOString() : null,
     enterprise: member.enterprise ?? null,
@@ -62,20 +86,26 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q")?.trim() ?? "";
+  const requestedPage = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(500, Math.max(1, Number.parseInt(searchParams.get("limit") ?? "20", 10) || 20));
+  const where = q
+    ? {
+        OR: [
+          { email: { contains: q } },
+          { recoveryEmail: { contains: q } },
+          { name: { contains: q } },
+          { enterprise: { companyName: { contains: q } } },
+          { enterprise: { companyShortName: { contains: q } } },
+          { enterprise: { brand: { name: { contains: q } } } },
+        ],
+      }
+    : undefined;
+  const total = await prisma.member.count({ where });
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const page = Math.min(requestedPage, totalPages);
 
   const members = await prisma.member.findMany({
-    where: q
-      ? {
-          OR: [
-            { email: { contains: q } },
-            { recoveryEmail: { contains: q } },
-            { name: { contains: q } },
-            { enterprise: { companyName: { contains: q } } },
-            { enterprise: { companyShortName: { contains: q } } },
-            { enterprise: { brand: { name: { contains: q } } } },
-          ],
-        }
-      : undefined,
+    where,
     select: {
       id: true,
       email: true,
@@ -83,6 +113,14 @@ export async function GET(request: NextRequest) {
       name: true,
       role: true,
       memberType: true,
+      phone: true,
+      phoneVerified: true,
+      accountStatus: true,
+      realName: true,
+      identityDocumentType: true,
+      identityDocumentNumber: true,
+      identityDocumentFrontPath: true,
+      identityDocumentBackPath: true,
       memberTypeExpiresAt: true,
       rankingWeight: true,
       canPublishWithoutReview: true,
@@ -94,7 +132,9 @@ export async function GET(request: NextRequest) {
       canEditMemberContent: true,
       canEditAllContent: true,
       registeredAt: true,
+      reviewedAt: true,
       createdAt: true,
+      _count: { select: { articles: true } },
       enterprise: {
         select: {
           id: true,
@@ -111,26 +151,40 @@ export async function GET(request: NextRequest) {
       },
     },
     orderBy: { createdAt: "desc" },
+    skip: (page - 1) * limit,
+    take: limit,
   });
 
-  if (isSuperAdmin(session)) {
-    return NextResponse.json(members.map((m) => serializeMember(m)));
-  }
+  // Batch lookup for this page; select only IDs, prioritizing pending applications.
+  const memberIds = members.map((m) => m.id);
+  const [pending, latest] = await Promise.all([
+    prisma.enterpriseVerification.findMany({
+      where: { memberId: { in: memberIds }, status: "pending" }, distinct: ["memberId"],
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, memberId: true },
+    }),
+    prisma.enterpriseVerification.findMany({
+      where: { memberId: { in: memberIds } }, distinct: ["memberId"],
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, memberId: true },
+    }),
+  ]);
+  const verificationIds = new Map([...latest, ...pending].map((v) => [v.memberId, v.id]));
+  const items = isSuperAdmin(session)
+    ? members.map((m) => ({ ...serializeMember(m), verificationId: verificationIds.get(m.id) ?? null }))
+    : members
+        .filter((m) => m.id !== session.sub)
+        .map((m) => ({
+          id: m.id,
+          displayName: m.name?.trim() || m.email,
+          verificationId: verificationIds.get(m.id) ?? null,
+          recoveryEmail: m.recoveryEmail ?? null,
+          role: m.role,
+          memberType: m.memberType,
+          enterpriseId: m.enterprise?.id || null,
+          enterpriseName: m.enterprise?.companyShortName || m.enterprise?.companyName || null,
+          brandName: m.enterprise?.brand?.name || null,
+        }));
 
-  return NextResponse.json(
-    members
-      .filter((m) => m.id !== session.sub)
-      .map((m) => ({
-        id: m.id,
-        displayName: m.name?.trim() || m.email,
-        recoveryEmail: m.recoveryEmail ?? null,
-        role: m.role,
-        memberType: m.memberType,
-        enterpriseId: m.enterprise?.id || null,
-        enterpriseName: m.enterprise?.companyShortName || m.enterprise?.companyName || null,
-        brandName: m.enterprise?.brand?.name || null,
-      }))
-  );
+  return NextResponse.json({ items, total, page, limit, totalPages });
 }
 
 export async function POST(request: NextRequest) {
@@ -209,6 +263,14 @@ export async function POST(request: NextRequest) {
         name: true,
         role: true,
         memberType: true,
+        phone: true,
+        phoneVerified: true,
+        accountStatus: true,
+        realName: true,
+        identityDocumentType: true,
+        identityDocumentNumber: true,
+        identityDocumentFrontPath: true,
+        identityDocumentBackPath: true,
         memberTypeExpiresAt: true,
         rankingWeight: true,
         canPublishWithoutReview: true,
@@ -220,7 +282,9 @@ export async function POST(request: NextRequest) {
         canEditMemberContent: true,
         canEditAllContent: true,
         registeredAt: true,
+        reviewedAt: true,
         createdAt: true,
+        _count: { select: { articles: true } },
       },
     });
 

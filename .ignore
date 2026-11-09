@@ -1,0 +1,9 @@
+# rg / Codex file search skip list (keeps agent context small)
+reports/
+artifacts/
+.release-worktrees/
+dist/
+custom/backups/
+custom/tmp/
+custom/reports/
+custom/experiments/

@@ -3,10 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { getCategories } from "@/lib/categories";
 import { annualBoards, engineerSuppliers, specialAwards, getTop10ByYear } from "@/lib/huadianbang";
 import { absoluteUrl } from "@/lib/seo";
-import { buildBuyingPath, buildNewsPath } from "@/lib/share-config";
+import { buildBuyingPath, buildDictionaryPath, buildNewsPath } from "@/lib/share-config";
+import { buildBrandPublicUrl, safeDecodeUrlSegment } from "@/lib/brand-public-url";
+import dictionaryLegacyAliasMap from "@/scripts/output/dictionary-legacy-alias-map.json";
 
 const SITEMAP_EXCLUDED_PREFIXES = ["/membership", "/search", "/api/"];
 const STATIC_LASTMOD = new Date("2026-07-02T00:00:00.000Z");
+const DICTIONARY_LEGACY_ALIAS_PATHS = new Set(Object.keys(dictionaryLegacyAliasMap));
 
 function createEntry(
   path: string,
@@ -80,7 +83,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   try {
-    const [terms, standards, standardArticles, brandArticles, newsArticles, tags, enterprises] = await Promise.all([
+    const dictionaryArticles = await prisma.article.findMany({
+      where: {
+        status: "approved",
+        OR: [{ categoryHref: { startsWith: "/dictionary" } }, { subHref: { startsWith: "/dictionary" } }],
+      },
+      select: { id: true, slug: true, updatedAt: true },
+    });
+    const [terms, standards, standardArticles, brandArticles, newsArticles, tags, enterprises, directoryBrands] = await Promise.all([
       prisma.term.findMany({ select: { slug: true, updatedAt: true } }),
       prisma.standard.findMany({ select: { id: true, updatedAt: true } }),
       prisma.article.findMany({
@@ -108,13 +118,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       prisma.tag.findMany({ select: { type: true, slug: true, updatedAt: true } }),
       prisma.enterprise.findMany({
         where: { verificationStatus: "approved" },
-        select: { id: true, updatedAt: true },
+        select: { id: true, companyName: true, companyShortName: true, updatedAt: true },
+      }),
+      prisma.brand.findMany({
+        where: { isBrandVisible: true },
+        select: {
+          slug: true,
+          updatedAt: true,
+          enterprise: { select: { id: true, updatedAt: true } },
+        },
       }),
     ]);
 
-    const termUrls = terms.map((term) =>
-      createEntry(`/dictionary/${term.slug}`, term.updatedAt, "monthly", 0.8)
-    );
+    const termUrls = terms
+      .filter((term) => !DICTIONARY_LEGACY_ALIAS_PATHS.has(`/dictionary/${safeDecodeUrlSegment(term.slug)}`))
+      .map((term) => createEntry(`/dictionary/${term.slug}`, term.updatedAt, "monthly", 0.8));
+
+    const dictionaryArticleUrls = dictionaryArticles
+      .filter((article) => !DICTIONARY_LEGACY_ALIAS_PATHS.has(`/dictionary/${safeDecodeUrlSegment(article.slug)}`))
+      .map((article) => createEntry(buildDictionaryPath(article.slug), article.updatedAt, "monthly", 0.8));
 
     const standardUrls = standards.map((standard) =>
       createEntry(`/standards/${standard.id}`, standard.updatedAt, "monthly", 0.8)
@@ -124,14 +146,43 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       createEntry(`/standards/${article.slug}`, article.updatedAt, "monthly", 0.8)
     );
 
+    const enterpriseIdByBrandSlug = new Map(
+      directoryBrands
+        .filter((brand) => brand.enterprise?.id)
+        .map((brand) => [safeDecodeUrlSegment(brand.slug), brand.enterprise!.id]),
+    );
+    const enterpriseIdByName = new Map<string, string>();
+    for (const enterprise of enterprises) {
+      for (const name of [enterprise.companyName, enterprise.companyShortName]) {
+        const normalizedName = safeDecodeUrlSegment(name ?? "");
+        if (normalizedName) enterpriseIdByName.set(normalizedName, enterprise.id);
+      }
+    }
+
     const brandUrls = brandArticles.map((article) =>
       createEntry(
         (article.categoryHref?.startsWith("/brands/buying") || article.subHref?.startsWith("/brands/buying"))
           ? buildBuyingPath(article.slug)
-          : `/brands/${article.slug}`,
+          : buildBrandPublicUrl({
+              slug: article.slug,
+              enterpriseId:
+                enterpriseIdByBrandSlug.get(safeDecodeUrlSegment(article.slug)) ??
+                enterpriseIdByName.get(safeDecodeUrlSegment(article.slug)),
+            }),
         article.updatedAt,
         "monthly",
         0.8
+      )
+    );
+
+    const directoryBrandUrls = directoryBrands.map((brand) =>
+      createEntry(
+        buildBrandPublicUrl({ slug: brand.slug, enterpriseId: brand.enterprise?.id }),
+        brand.enterprise?.updatedAt && brand.enterprise.updatedAt > brand.updatedAt
+          ? brand.enterprise.updatedAt
+          : brand.updatedAt,
+        "monthly",
+        0.8,
       )
     );
 
@@ -173,9 +224,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ...staticPages,
       ...subcategoryUrls,
       ...termUrls,
+      ...dictionaryArticleUrls,
       ...standardUrls,
       ...standardArticleUrls,
       ...brandUrls,
+      ...directoryBrandUrls,
       ...articleUrls,
       ...tagUrls,
       ...enterpriseUrls,

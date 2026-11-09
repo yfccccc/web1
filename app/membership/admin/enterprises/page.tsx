@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 
 type EnterpriseRow = {
   id: string;
@@ -31,7 +32,12 @@ type EnterpriseRow = {
 type ApiResponse = {
   items: EnterpriseRow[];
   total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 };
+
+const PAGE_SIZE = 20;
 
 function displayEnterpriseName(item: EnterpriseRow) {
   return item.companyShortName || item.companyName || item.member.name || item.member.email;
@@ -58,13 +64,16 @@ export default function AdminEnterprisesPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [creatingId, setCreatingId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const hasFilters = search.trim().length > 0 || brandBinding !== "all";
 
   const load = useCallback(async () => {
     setLoading(true);
     setMessage("");
 
-    const params = new URLSearchParams({ limit: "200" });
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), page: String(page) });
     if (search.trim()) params.set("q", search.trim());
     if (brandBinding !== "all") params.set("brandBinding", brandBinding);
 
@@ -76,14 +85,19 @@ export default function AdminEnterprisesPage() {
 
     if (!res.ok) {
       setItems([]);
+      setTotal(0);
+      setTotalPages(1);
       setMessage(data.error ?? "企业列表加载失败");
       setLoading(false);
       return;
     }
 
     setItems(Array.isArray(data.items) ? data.items : []);
+    setTotal(typeof data.total === "number" ? data.total : 0);
+    setTotalPages(typeof data.totalPages === "number" ? data.totalPages : 1);
+    if (typeof data.page === "number" && data.page !== page) setPage(data.page);
     setLoading(false);
-  }, [brandBinding, search]);
+  }, [brandBinding, page, search]);
 
   useEffect(() => {
     void load();
@@ -150,6 +164,7 @@ export default function AdminEnterprisesPage() {
           className="grid gap-3 md:grid-cols-[1fr,220px,auto,auto]"
           onSubmit={(event) => {
             event.preventDefault();
+            setPage(1);
             setSearch(q);
           }}
         >
@@ -161,7 +176,7 @@ export default function AdminEnterprisesPage() {
           />
           <select
             value={brandBinding}
-            onChange={(event) => setBrandBinding(event.target.value as "all" | "bound" | "unbound")}
+            onChange={(event) => { setPage(1); setBrandBinding(event.target.value as "all" | "bound" | "unbound"); }}
             className="h-12 rounded-[16px] border border-border bg-surface px-4 text-sm text-primary"
           >
             <option value="all">全部企业</option>
@@ -176,6 +191,7 @@ export default function AdminEnterprisesPage() {
               setQ("");
               setSearch("");
               setBrandBinding("all");
+              setPage(1);
             }}
           >
             重置
@@ -251,6 +267,7 @@ export default function AdminEnterprisesPage() {
           </div>
         )}
       </section>
+      <AdminPagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} currentCount={items.length} loading={loading} onPageChange={setPage} />
     </div>
   );
 }

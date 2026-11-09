@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 
 type BrandRow = {
   id: string;
@@ -557,24 +558,9 @@ export default function AdminBrandsPage() {
           <span>当前第 {page} / {totalPages} 页，本页前台显示 {currentPageVisibleCount} 家。</span>
           <span>已选择 {selectedCount} 家，推荐品牌共 {stats.recommendedTotal} 家。</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            disabled={page <= 1 || loading}
-            onClick={() => void load(q, qualityFilter, page - 1)}
-            className="rounded-full border border-border px-4 py-2 text-primary transition hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            上一页
-          </button>
-          <button
-            type="button"
-            disabled={page >= totalPages || loading}
-            onClick={() => void load(q, qualityFilter, page + 1)}
-            className="rounded-full border border-border px-4 py-2 text-primary transition hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            下一页
-          </button>
-          <div className="ml-auto flex items-center gap-2">
+        <AdminPagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} currentCount={items.length} loading={loading} onPageChange={(nextPage) => void load(q, qualityFilter, nextPage)} />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex items-center gap-2">
             <span>跳到第</span>
             <input
               value={pageInput}

@@ -1,4 +1,4 @@
-import { PUBLIC_SITE_URL } from "./public-site-config";
+import { getSiteUrl } from "./seo";
 
 const FALLBACK_SHARE_VERSION = "mobile-share-20260329-1";
 export const DEFAULT_DICTIONARY_SHARE_IMAGE = "/images/dictionary-share-default.png";
@@ -21,15 +21,15 @@ export function buildDictionaryPath(segment: string) {
 }
 
 export function buildPublicNewsUrl(segment: string) {
-  return `${PUBLIC_SITE_URL}${buildNewsPath(segment)}`;
+  return `${getSiteUrl()}${buildNewsPath(segment)}`;
 }
 
 export function buildPublicBuyingUrl(segment: string) {
-  return `${PUBLIC_SITE_URL}${buildBuyingPath(segment)}`;
+  return `${getSiteUrl()}${buildBuyingPath(segment)}`;
 }
 
 export function buildPublicDictionaryUrl(segment: string) {
-  return `${PUBLIC_SITE_URL}${buildDictionaryPath(segment)}`;
+  return `${getSiteUrl()}${buildDictionaryPath(segment)}`;
 }
 
 export function buildArticleShareVersion(value: string | number | Date | null | undefined) {

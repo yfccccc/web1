@@ -78,7 +78,7 @@ type HomepageAwardItem = {
   year: number | null;
 };
 
-type HomepageBrandSourceItem = Omit<HomepageBrandItem, "detailHref">;
+type HomepageBrandSourceItem = Omit<HomepageBrandItem, "detailHref"> & { publicUrl: string };
 
 function buildHomepageData({
   visualSettings,
@@ -123,7 +123,7 @@ function buildHomepageData({
       image: visualSettings.backgrounds.homeStructureMarket,
       items: safeBrands.map((item) => ({
         label: item.enterpriseName,
-        href: `/brands/${item.slug}`,
+        href: item.publicUrl,
       })),
     },
     {
@@ -169,7 +169,7 @@ function buildHomepageData({
     locationLabel: item.locationLabel,
     logoUrl: item.logoUrl,
     slug: item.slug,
-    detailHref: `/brands/${item.slug}`,
+    detailHref: item.publicUrl,
     contactLabel: item.contactLabel,
     region: item.region,
   }));

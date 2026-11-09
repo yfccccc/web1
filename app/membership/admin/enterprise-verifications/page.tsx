@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { VerificationCard } from "@/app/membership/admin/enterprise-verifications/components/VerificationCard";
 import { VerificationFilters } from "@/app/membership/admin/enterprise-verifications/components/VerificationFilters";
 import { InlinePageBackLink } from "@/components/InlinePageBackLink";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+
+const PAGE_SIZE = 20;
 
 type Status = "pending" | "approved" | "rejected";
 
@@ -45,6 +48,9 @@ export default function AdminEnterpriseVerificationPage() {
   const [statusFilter, setStatusFilter] = useState<"" | Status>("pending");
   const [items, setItems] = useState<VerificationItem[]>([]);
   const [reviewNote, setReviewNote] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,7 +69,7 @@ export default function AdminEnterpriseVerificationPage() {
       return;
     }
 
-    const sp = new URLSearchParams({ limit: "200" });
+    const sp = new URLSearchParams({ limit: String(PAGE_SIZE), page: String(page) });
     if (statusFilter) sp.set("status", statusFilter);
     const res = await fetch(`/api/admin/enterprise-verifications?${sp.toString()}`, {
       credentials: "include",
@@ -71,8 +77,11 @@ export default function AdminEnterpriseVerificationPage() {
     });
     const data = await res.json().catch(() => ({}));
     setItems(Array.isArray(data.items) ? data.items : []);
+    setTotal(typeof data.total === "number" ? data.total : 0);
+    setTotalPages(typeof data.totalPages === "number" ? data.totalPages : 1);
+    if (typeof data.page === "number" && data.page !== page) setPage(data.page);
     setLoading(false);
-  }, [statusFilter]);
+  }, [page, statusFilter]);
 
   useEffect(() => {
     void load();
@@ -114,7 +123,7 @@ export default function AdminEnterpriseVerificationPage() {
         {message ? <p className="mt-2 text-sm text-accent">{message}</p> : null}
       </header>
 
-      <VerificationFilters statusFilter={statusFilter} onChange={setStatusFilter} />
+      <VerificationFilters statusFilter={statusFilter} onChange={(value) => { setPage(1); setStatusFilter(value); }} />
 
       <section className="space-y-4">
         {items.length === 0 ? (
@@ -132,6 +141,7 @@ export default function AdminEnterpriseVerificationPage() {
           ))
         )}
       </section>
+      <AdminPagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} currentCount={items.length} loading={loading} onPageChange={setPage} />
     </div>
   );
 }
