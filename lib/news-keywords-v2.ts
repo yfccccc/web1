@@ -326,8 +326,8 @@ function safeParseJsonArray(input: string | null | undefined) {
   }
 }
 
-async function loadWhitelistEntries() {
-  const rows = await prisma.industryWhitelist.findMany({
+async function loadWhitelistEntries(db: Pick<Prisma.TransactionClient, "industryWhitelist"> = prisma) {
+  const rows = await db.industryWhitelist.findMany({
     select: {
       word: true,
       category: true,
@@ -552,15 +552,16 @@ export async function previewArticleKeywordCleanup(options: KeywordSyncOptions) 
   };
 }
 
-export async function syncArticleKeywords(options: KeywordSyncOptions) {
+export async function syncArticleKeywords(options: KeywordSyncOptions, transaction?: Prisma.TransactionClient) {
+  const db = transaction ?? prisma;
   const saved = options.manualKeywords === undefined
-    ? await prisma.article.findUnique({ where: { id: options.articleId }, select: { manualKeywords: true } })
+    ? await db.article.findUnique({ where: { id: options.articleId }, select: { manualKeywords: true } })
     : null;
-  const entries = await loadWhitelistEntries();
+  const entries = await loadWhitelistEntries(db);
   const imported = normalizeKeywordList(options.canonicalKeywords);
   const requestedManual = imported.length ? imported : normalizeKeywordList(options.manualKeywords ?? saved?.manualKeywords);
   const result = extractWithWhitelist({ ...options, keywordHints: requestedManual }, entries);
-  return prisma.$transaction(async (tx) => {
+  const save = async (tx: Prisma.TransactionClient) => {
     const promoted = options.learn === false ? []
       : await learnPendingKeywords(tx, options.articleId, result.pendingKeywords);
     const available = [...entries, ...promoted.map((word) => ({ word, category: "自动发现", weight: 1, synonyms: [] }))];
@@ -588,7 +589,8 @@ export async function syncArticleKeywords(options: KeywordSyncOptions) {
       })),
     });
     return { autoKeywords, activeKeywords, manualKeywords, promotedKeywords: promoted };
-  }, { maxWait: 10000, timeout: 30000 });
+  };
+  return transaction ? save(transaction) : prisma.$transaction(save, { maxWait: 10000, timeout: 30000 });
 }
 
 type RelatedArticle = {
@@ -792,7 +794,7 @@ export async function getArticlesByKeyword(name: string, limit = 30) {
   }
 
   const where: Prisma.ArticleWhereInput = {
-    status: "approved",
+    AND: [buildPublishedNewsWhere()],
     OR: [
       { keywordItems: { some: { keyword } } },
       { manualKeywords: { contains: keyword } },

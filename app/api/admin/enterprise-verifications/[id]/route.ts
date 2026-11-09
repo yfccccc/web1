@@ -4,6 +4,10 @@ import { getSession } from "@/lib/session";
 import { writeOperationLog } from "@/lib/operation-log";
 import { normalizeRichTextField } from "@/lib/brand-content";
 
+class ReviewConflict extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+
 function isAdmin(role: string | null | undefined) {
   return role === "SUPER_ADMIN" || role === "ADMIN";
 }
@@ -26,123 +30,101 @@ export async function PATCH(
     return NextResponse.json({ error: "action 仅支持 approve/reject" }, { status: 400 });
   }
 
-  const current = await prisma.enterpriseVerification.findUnique({
-    where: { id },
-  });
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const current = await tx.enterpriseVerification.findUnique({ where: { id } });
+      if (!current) throw new ReviewConflict(404, "认证申请不存在");
+      if (current.status !== "pending") throw new ReviewConflict(409, "该申请已处理");
+      // Claim the exact pending revision before any enterprise/member side effects.
+      // PostgreSQL rechecks this predicate after waiting for a concurrent writer.
+      const reviewNoteValue = reviewNote || (action === "approve" ? "审核通过" : "资质信息不完整或不符合要求");
+      const claimed = await tx.enterpriseVerification.updateMany({
+        where: { id, status: "pending", updatedAt: current.updatedAt },
+        data: { status: action === "approve" ? "approved" : "rejected",
+          reviewNote: reviewNoteValue, reviewedAt: new Date(), reviewedById: session.sub },
+      });
+      if (claimed.count !== 1) throw new ReviewConflict(409, "申请已被处理或修改，请刷新后重试");
+      if (action === "reject") {
+        return { rejected: await tx.enterpriseVerification.findUniqueOrThrow({ where: { id } }), enterpriseId: null };
+      }
 
-  if (!current) {
-    return NextResponse.json({ error: "认证申请不存在" }, { status: 404 });
-  }
-  if (current.status !== "pending") {
-    return NextResponse.json({ error: "该申请已处理" }, { status: 400 });
-  }
+      const enterprise = await tx.enterprise.upsert({
+        where: { memberId: current.memberId },
+        create: {
+          memberId: current.memberId,
+          companyName: current.companyName,
+          companyShortName: current.companyShortName,
+          contactPerson: current.contactPerson,
+          contactPhone: current.contactPhone,
+          contactInfo: current.contactEmail,
+          website: current.website,
+          address: current.address,
+          licenseCode: current.licenseCode,
+          foundedAt: current.foundedAt,
+          registeredCapital: current.registeredCapital,
+          intro: normalizeRichTextField(current.intro),
+          logoUrl: current.logoUrl,
+          productSystem: current.productSystem,
+          positioning: current.coreAdvantages,
+          certifications: current.businessScope,
+          verificationStatus: "approved",
+          verifiedAt: new Date(),
+          sourceVerificationId: current.id,
+        },
+        update: {
+          companyName: current.companyName,
+          companyShortName: current.companyShortName,
+          contactPerson: current.contactPerson,
+          contactPhone: current.contactPhone,
+          contactInfo: current.contactEmail,
+          website: current.website,
+          address: current.address,
+          licenseCode: current.licenseCode,
+          foundedAt: current.foundedAt,
+          registeredCapital: current.registeredCapital,
+          intro: normalizeRichTextField(current.intro),
+          logoUrl: current.logoUrl,
+          productSystem: current.productSystem,
+          positioning: current.coreAdvantages,
+          certifications: current.businessScope,
+          verificationStatus: "approved",
+          verifiedAt: new Date(),
+          sourceVerificationId: current.id,
+        },
+        select: { id: true },
+      });
 
-  if (action === "reject") {
-    const rejected = await prisma.enterpriseVerification.update({
-      where: { id },
-      data: {
-        status: "rejected",
-        reviewNote: reviewNote || "资质信息不完整或不符合要求",
-        reviewedAt: new Date(),
-        reviewedById: session.sub,
-      },
-    });
+      await tx.enterpriseVerification.update({
+        where: { id }, data: { approvedEnterpriseId: enterprise.id },
+      });
+
+      const member = await tx.member.findUnique({
+        where: { id: current.memberId },
+        select: { memberType: true, name: true },
+      });
+
+      if (member) {
+        const patch: { memberType?: string; name?: string } = {};
+        if (member.memberType === "personal") patch.memberType = "enterprise_basic";
+        if (!member.name || !member.name.trim()) patch.name = current.companyShortName || current.companyName;
+        if (Object.keys(patch).length > 0) {
+          await tx.member.update({ where: { id: current.memberId }, data: patch });
+        }
+      }
+
+      return { rejected: null, enterpriseId: enterprise.id };
+    }, { maxWait: 10000, timeout: 30000 });
 
     await writeOperationLog({
-      actorId: session.sub,
-      actorEmail: session.email,
-      action: "enterprise_verification_reject",
-      targetType: "enterprise_verification",
-      targetId: rejected.id,
-      detail: JSON.stringify({ reviewNote: rejected.reviewNote }),
+      actorId: session.sub, actorEmail: session.email,
+      action: action === "approve" ? "enterprise_verification_approve" : "enterprise_verification_reject",
+      targetType: "enterprise_verification", targetId: id,
+      detail: JSON.stringify(result.rejected ? { reviewNote: result.rejected.reviewNote } : { enterpriseId: result.enterpriseId }),
     });
-
-    return NextResponse.json(rejected);
+    return result.rejected ? NextResponse.json(result.rejected)
+      : NextResponse.json({ ok: true, enterpriseId: result.enterpriseId });
+  } catch (error) {
+    if (error instanceof ReviewConflict) return NextResponse.json({ error: error.message }, { status: error.status });
+    throw error;
   }
-
-  const approved = await prisma.$transaction(async (tx) => {
-    const enterprise = await tx.enterprise.upsert({
-      where: { memberId: current.memberId },
-      create: {
-        memberId: current.memberId,
-        companyName: current.companyName,
-        companyShortName: current.companyShortName,
-        contactPerson: current.contactPerson,
-        contactPhone: current.contactPhone,
-        contactInfo: current.contactEmail,
-        website: current.website,
-        address: current.address,
-        licenseCode: current.licenseCode,
-        foundedAt: current.foundedAt,
-        registeredCapital: current.registeredCapital,
-        intro: normalizeRichTextField(current.intro),
-        logoUrl: current.logoUrl,
-        productSystem: current.productSystem,
-        positioning: current.coreAdvantages,
-        certifications: current.businessScope,
-        verificationStatus: "approved",
-        verifiedAt: new Date(),
-        sourceVerificationId: current.id,
-      },
-      update: {
-        companyName: current.companyName,
-        companyShortName: current.companyShortName,
-        contactPerson: current.contactPerson,
-        contactPhone: current.contactPhone,
-        contactInfo: current.contactEmail,
-        website: current.website,
-        address: current.address,
-        licenseCode: current.licenseCode,
-        foundedAt: current.foundedAt,
-        registeredCapital: current.registeredCapital,
-        intro: normalizeRichTextField(current.intro),
-        logoUrl: current.logoUrl,
-        productSystem: current.productSystem,
-        positioning: current.coreAdvantages,
-        certifications: current.businessScope,
-        verificationStatus: "approved",
-        verifiedAt: new Date(),
-        sourceVerificationId: current.id,
-      },
-      select: { id: true },
-    });
-
-    await tx.enterpriseVerification.update({
-      where: { id: current.id },
-      data: {
-        status: "approved",
-        reviewNote: reviewNote || "审核通过",
-        reviewedAt: new Date(),
-        reviewedById: session.sub,
-        approvedEnterpriseId: enterprise.id,
-      },
-    });
-
-    const member = await tx.member.findUnique({
-      where: { id: current.memberId },
-      select: { memberType: true, name: true },
-    });
-
-    if (member) {
-      const patch: { memberType?: string; name?: string } = {};
-      if (member.memberType === "personal") patch.memberType = "enterprise_basic";
-      if (!member.name || !member.name.trim()) patch.name = current.companyShortName || current.companyName;
-      if (Object.keys(patch).length > 0) {
-        await tx.member.update({ where: { id: current.memberId }, data: patch });
-      }
-    }
-
-    return enterprise;
-  });
-
-  await writeOperationLog({
-    actorId: session.sub,
-    actorEmail: session.email,
-    action: "enterprise_verification_approve",
-    targetType: "enterprise_verification",
-    targetId: current.id,
-    detail: JSON.stringify({ enterpriseId: approved.id }),
-  });
-
-  return NextResponse.json({ ok: true, enterpriseId: approved.id });
 }

@@ -301,84 +301,77 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const article = await prisma.article.create({
-      data: {
-        title: normalizedTitle,
-        slug: slugTrim,
-        sourceType: "manual",
-        source: typeof source === "string" ? source.trim() || null : null,
-        generationBatchId: null,
-        keywordSeed: null,
-        keywordIntent: null,
-        sourceUrl: typeof sourceUrl === "string" ? sourceUrl.trim() || null : null,
-        displayAuthor: typeof displayAuthor === "string" ? displayAuthor.trim() || null : null,
-        excerpt: typeof excerpt === "string" ? excerpt.trim() || null : null,
-        content: normalizedContent,
-        coverImage: typeof coverImage === "string" ? coverImage.trim() || null : null,
-        subHref: typeof subHref === "string" ? subHref.trim() || null : null,
-        categoryHref: typeof categoryHref === "string" ? categoryHref.trim() || null : null,
-        publishedAt: resolvedPublishedAt,
-        conceptSummary: typeof conceptSummary === "string" ? conceptSummary.trim() || null : null,
-        applicableScenarios: typeof applicableScenarios === "string" ? applicableScenarios.trim() || null : null,
-        versionLabel: typeof versionLabel === "string" ? versionLabel.trim() || null : null,
-        relatedTermSlugs: typeof relatedTermSlugs === "string" ? relatedTermSlugs.trim() || null : null,
-        relatedStandardIds: typeof relatedStandardIds === "string" ? relatedStandardIds.trim() || null : null,
-        relatedBrandIds: typeof relatedBrandIds === "string" ? relatedBrandIds.trim() || null : null,
-        ownedEnterpriseId: normalizedOwnedEnterpriseId,
-        faqJson: typeof faqJson === "string" ? faqJson.trim() || null : null,
-        tagSlugs: resolvedTagSlugs.length > 0 ? resolvedTagSlugs.join(",") : null,
-        manualKeywords:
-          typeof manualKeywords === "string"
-            ? (syncWordKeywords === true ? formatImportedKeywordCsv(manualKeywords) : formatKeywordCsv(manualKeywords.split(/[,\n，]+/))) || null
-            : null,
-        recommendIds: typeof recommendIds === "string" ? recommendIds.trim() || null : null,
-        productRecommendations:
-          typeof productRecommendations === "string"
-            ? stringifyProductRecommendations(parseProductRecommendations(productRecommendations))
-            : null,
-        syncToMainSite: syncToMainSite === true,
-        isPinned: typeof isPinned === "boolean" ? isPinned : false,
-        status: safeStatus,
-        authorMemberId: session.sub,
-        reviewNote: typeof reviewNote === "string" ? reviewNote.trim() || null : null,
-        reviewedAt: safeStatus === "approved" || safeStatus === "rejected" ? new Date() : null,
-        reviewedById: safeStatus === "approved" || safeStatus === "rejected" ? session.sub : null,
-      },
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        categoryHref: true,
-        subHref: true,
-        status: true,
-        ownedEnterpriseId: true,
-        ownedEnterprise: {
-          select: {
-            id: true,
-            companyName: true,
-            companyShortName: true,
+    const article = await prisma.$transaction(async (tx) => {
+      const article = await tx.article.create({
+        data: {
+          title: normalizedTitle,
+          slug: slugTrim,
+          sourceType: "manual",
+          source: typeof source === "string" ? source.trim() || null : null,
+          generationBatchId: null,
+          keywordSeed: null,
+          keywordIntent: null,
+          sourceUrl: typeof sourceUrl === "string" ? sourceUrl.trim() || null : null,
+          displayAuthor: typeof displayAuthor === "string" ? displayAuthor.trim() || null : null,
+          excerpt: typeof excerpt === "string" ? excerpt.trim() || null : null,
+          content: normalizedContent,
+          coverImage: typeof coverImage === "string" ? coverImage.trim() || null : null,
+          subHref: typeof subHref === "string" ? subHref.trim() || null : null,
+          categoryHref: typeof categoryHref === "string" ? categoryHref.trim() || null : null,
+          publishedAt: resolvedPublishedAt,
+          conceptSummary: typeof conceptSummary === "string" ? conceptSummary.trim() || null : null,
+          applicableScenarios: typeof applicableScenarios === "string" ? applicableScenarios.trim() || null : null,
+          versionLabel: typeof versionLabel === "string" ? versionLabel.trim() || null : null,
+          relatedTermSlugs: typeof relatedTermSlugs === "string" ? relatedTermSlugs.trim() || null : null,
+          relatedStandardIds: typeof relatedStandardIds === "string" ? relatedStandardIds.trim() || null : null,
+          relatedBrandIds: typeof relatedBrandIds === "string" ? relatedBrandIds.trim() || null : null,
+          ownedEnterpriseId: normalizedOwnedEnterpriseId,
+          faqJson: typeof faqJson === "string" ? faqJson.trim() || null : null,
+          tagSlugs: resolvedTagSlugs.length > 0 ? resolvedTagSlugs.join(",") : null,
+          manualKeywords:
+            typeof manualKeywords === "string"
+              ? (syncWordKeywords === true ? formatImportedKeywordCsv(manualKeywords) : formatKeywordCsv(manualKeywords.split(/[,\n，]+/))) || null
+              : null,
+          recommendIds: typeof recommendIds === "string" ? recommendIds.trim() || null : null,
+          productRecommendations:
+            typeof productRecommendations === "string"
+              ? stringifyProductRecommendations(parseProductRecommendations(productRecommendations))
+              : null,
+          syncToMainSite: syncToMainSite === true,
+          isPinned: typeof isPinned === "boolean" ? isPinned : false,
+          status: safeStatus,
+          authorMemberId: session.sub,
+          reviewNote: typeof reviewNote === "string" ? reviewNote.trim() || null : null,
+          reviewedAt: safeStatus === "approved" || safeStatus === "rejected" ? new Date() : null,
+          reviewedById: safeStatus === "approved" || safeStatus === "rejected" ? session.sub : null,
+        },
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          categoryHref: true,
+          subHref: true,
+          status: true,
+          ownedEnterpriseId: true,
+          ownedEnterprise: {
+            select: {
+              id: true,
+              companyName: true,
+              companyShortName: true,
+            },
           },
         },
-      },
-    });
+      });
 
-    try {
       await syncArticleKeywords({
         articleId: article.id,
         title: normalizedTitle,
         content: normalizedContent,
         manualKeywords: typeof manualKeywords === "string" ? manualKeywords : null,
         canonicalKeywords: syncWordKeywords === true && typeof manualKeywords === "string" ? manualKeywords : null,
-      });
-    } catch (keywordError) {
-      await prisma.newsKeyword.deleteMany({ where: { newsId: article.id } }).catch(() => undefined);
-      await prisma.article.delete({ where: { id: article.id } }).catch(() => undefined);
-      const reason = getMutationErrorMessage(keywordError, "关键词同步失败");
-      return NextResponse.json(
-        { error: `发布失败：${reason}。本次文章未保存，请修正后重试。` },
-        { status: 500 },
-      );
-    }
+      }, tx);
+      return article;
+    }, { maxWait: 10000, timeout: 30000 });
 
     await pushApprovedNewsToBaidu(
       {

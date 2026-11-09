@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { buildPageMetadata } from "@/lib/seo";
 import { buildNewsPath } from "@/lib/share-config";
+import { buildPublishedNewsWhere } from "@/lib/news-listing";
 
 export const revalidate = 300;
 
@@ -36,7 +37,9 @@ export default async function TagSlugPage({ params }: Props) {
     where: { type, slug },
     include: {
       articles: {
+        where: { article: { is: { AND: [buildPublishedNewsWhere(), { publishedAt: { not: null } }] } } },
         include: { article: true },
+        orderBy: [{ article: { isPinned: "desc" } }, { article: { publishedAt: "desc" } }, { article: { id: "desc" } }],
         take: 100,
       },
     },
@@ -45,11 +48,7 @@ export default async function TagSlugPage({ params }: Props) {
 
   const articles = tag.articles
     .map((a) => a.article)
-    .filter((a) => a.publishedAt != null)
-    .sort((a, b) => {
-      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
-      return b.publishedAt!.getTime() - a.publishedAt!.getTime();
-    });
+    .filter((a) => a.id && a.slug.trim() && a.title.trim());
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">

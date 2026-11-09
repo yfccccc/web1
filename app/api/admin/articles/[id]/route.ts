@@ -346,71 +346,74 @@ export async function PATCH(
     return NextResponse.json({ error: "当前账号没有直接修改权限，请提交修改申请" }, { status: 403 });
   }
 
-  const article = await prisma.article.update({
-    where: { id },
-    data,
-    select: {
-      id: true,
-      slug: true,
-      title: true,
-      sourceType: true,
-      source: true,
-      generationBatchId: true,
-      keywordSeed: true,
-      keywordIntent: true,
-      sourceUrl: true,
-      displayAuthor: true,
-      categoryHref: true,
-      subHref: true,
-      authorMemberId: true,
-      publishedAt: true,
-      excerpt: true,
-      content: true,
-      coverImage: true,
-      tagSlugs: true,
-      keywords: true,
-      manualKeywords: true,
-      recommendIds: true,
-      productRecommendations: true,
-      isPinned: true,
-      status: true,
-      reviewNote: true,
-      reviewedAt: true,
-      reviewedById: true,
-      updatedAt: true,
-      createdAt: true,
-      conceptSummary: true,
-      applicableScenarios: true,
-      versionLabel: true,
-      relatedTermSlugs: true,
-      relatedStandardIds: true,
-      relatedBrandIds: true,
-      ownedEnterpriseId: true,
-      ownedEnterprise: {
-        select: {
-          id: true,
-          companyName: true,
-          companyShortName: true,
+  const article = await prisma.$transaction(async (tx) => {
+    const article = await tx.article.update({
+      where: { id },
+      data,
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        sourceType: true,
+        source: true,
+        generationBatchId: true,
+        keywordSeed: true,
+        keywordIntent: true,
+        sourceUrl: true,
+        displayAuthor: true,
+        categoryHref: true,
+        subHref: true,
+        authorMemberId: true,
+        publishedAt: true,
+        excerpt: true,
+        content: true,
+        coverImage: true,
+        tagSlugs: true,
+        keywords: true,
+        manualKeywords: true,
+        recommendIds: true,
+        productRecommendations: true,
+        isPinned: true,
+        status: true,
+        reviewNote: true,
+        reviewedAt: true,
+        reviewedById: true,
+        updatedAt: true,
+        createdAt: true,
+        conceptSummary: true,
+        applicableScenarios: true,
+        versionLabel: true,
+        relatedTermSlugs: true,
+        relatedStandardIds: true,
+        relatedBrandIds: true,
+        ownedEnterpriseId: true,
+        ownedEnterprise: {
+          select: {
+            id: true,
+            companyName: true,
+            companyShortName: true,
+          },
         },
+        faqJson: true,
+        syncToMainSite: true,
       },
-      faqJson: true,
-      syncToMainSite: true,
-    },
-  });
-
-  if (
-    typeof data.title === "string" ||
-    typeof data.content === "string" ||
-    typeof data.manualKeywords === "string" ||
-    data.manualKeywords === null
-  ) {
-    await syncArticleKeywords({
-      articleId: article.id,
-      title: article.title,
-      content: article.content,
-      manualKeywords: article.manualKeywords,
     });
-  }
+
+    if (
+      typeof data.title === "string" ||
+      typeof data.content === "string" ||
+      typeof data.manualKeywords === "string" ||
+      data.manualKeywords === null
+    ) {
+      await syncArticleKeywords({
+        articleId: article.id,
+        title: article.title,
+        content: article.content,
+        manualKeywords: article.manualKeywords,
+      }, tx);
+    }
+    return article;
+  }, { maxWait: 10000, timeout: 30000 });
 
   await revalidateArticlePaths(article);
 

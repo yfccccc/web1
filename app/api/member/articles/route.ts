@@ -210,49 +210,52 @@ export async function POST(request: NextRequest) {
     subHref: typeof subHref === "string" ? subHref : null,
   });
 
-  const article = await prisma.article.create({
-    data: {
-      title: normalizedTitle,
-      slug: slugTrim,
-      sourceType: "manual",
-      source: typeof source === "string" ? source.trim() || null : null,
-      sourceUrl: typeof sourceUrl === "string" ? sourceUrl.trim() || null : null,
-      displayAuthor: typeof displayAuthor === "string" ? displayAuthor.trim() || null : null,
-      excerpt: typeof excerpt === "string" ? excerpt.trim() || null : null,
-      content: normalizedContent,
-      coverImage: typeof coverImage === "string" ? coverImage.trim() || null : null,
-      subHref: normalizedSubHref,
-      categoryHref: categoryHrefTrim,
-      relatedTermSlugs:
-        membershipRule.canLinkTerms && typeof relatedTermSlugs === "string"
-          ? relatedTermSlugs.trim() || null
-          : null,
-      relatedStandardIds:
-        membershipRule.canLinkStandards && typeof relatedStandardIds === "string"
-          ? relatedStandardIds.trim() || null
-          : null,
-      relatedBrandIds: typeof relatedBrandIds === "string" ? relatedBrandIds.trim() || null : null,
-      faqJson: typeof faqJson === "string" ? faqJson.trim() || null : null,
-      tagSlugs: resolvedTagSlugs.length > 0 ? resolvedTagSlugs.join(",") : null,
-      manualKeywords:
-        typeof manualKeywords === "string"
-          ? (syncWordKeywords === true ? formatImportedKeywordCsv(manualKeywords) : formatKeywordCsv(manualKeywords.split(/[,\n，]+/))) || null
-          : null,
-      syncToMainSite: normalizedSyncToMainSite,
-      isPinned: (session.role === "SUPER_ADMIN" || session.role === "ADMIN") && isPinned === true,
-      publishedAt: submissionStatus === "approved" ? new Date() : null,
-      status: submissionStatus,
-      authorMemberId: session.sub,
-    },
-  });
+  const article = await prisma.$transaction(async (tx) => {
+    const article = await tx.article.create({
+      data: {
+        title: normalizedTitle,
+        slug: slugTrim,
+        sourceType: "manual",
+        source: typeof source === "string" ? source.trim() || null : null,
+        sourceUrl: typeof sourceUrl === "string" ? sourceUrl.trim() || null : null,
+        displayAuthor: typeof displayAuthor === "string" ? displayAuthor.trim() || null : null,
+        excerpt: typeof excerpt === "string" ? excerpt.trim() || null : null,
+        content: normalizedContent,
+        coverImage: typeof coverImage === "string" ? coverImage.trim() || null : null,
+        subHref: normalizedSubHref,
+        categoryHref: categoryHrefTrim,
+        relatedTermSlugs:
+          membershipRule.canLinkTerms && typeof relatedTermSlugs === "string"
+            ? relatedTermSlugs.trim() || null
+            : null,
+        relatedStandardIds:
+          membershipRule.canLinkStandards && typeof relatedStandardIds === "string"
+            ? relatedStandardIds.trim() || null
+            : null,
+        relatedBrandIds: typeof relatedBrandIds === "string" ? relatedBrandIds.trim() || null : null,
+        faqJson: typeof faqJson === "string" ? faqJson.trim() || null : null,
+        tagSlugs: resolvedTagSlugs.length > 0 ? resolvedTagSlugs.join(",") : null,
+        manualKeywords:
+          typeof manualKeywords === "string"
+            ? (syncWordKeywords === true ? formatImportedKeywordCsv(manualKeywords) : formatKeywordCsv(manualKeywords.split(/[,\n，]+/))) || null
+            : null,
+        syncToMainSite: normalizedSyncToMainSite,
+        isPinned: (session.role === "SUPER_ADMIN" || session.role === "ADMIN") && isPinned === true,
+        publishedAt: submissionStatus === "approved" ? new Date() : null,
+        status: submissionStatus,
+        authorMemberId: session.sub,
+      },
+    });
 
-  await syncArticleKeywords({
-    articleId: article.id,
-    title: normalizedTitle,
-    content: normalizedContent,
-    manualKeywords: typeof manualKeywords === "string" ? manualKeywords : null,
-    canonicalKeywords: syncWordKeywords === true && typeof manualKeywords === "string" ? manualKeywords : null,
-  });
+    await syncArticleKeywords({
+      articleId: article.id,
+      title: normalizedTitle,
+      content: normalizedContent,
+      manualKeywords: typeof manualKeywords === "string" ? manualKeywords : null,
+      canonicalKeywords: syncWordKeywords === true && typeof manualKeywords === "string" ? manualKeywords : null,
+    }, tx);
+    return article;
+  }, { maxWait: 10000, timeout: 30000 });
 
   await writeOperationLog({
     actorId: session.sub,
