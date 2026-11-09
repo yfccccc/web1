@@ -1,9 +1,12 @@
 const { readFileSync, mkdirSync, writeFileSync } = require("node:fs") as typeof import("node:fs");
+const { randomUUID } = require("node:crypto") as typeof import("node:crypto");
 const { resolve, dirname } = require("node:path") as typeof import("node:path");
 const { PrismaClient } = require("@prisma/client") as typeof import("@prisma/client");
 const bcrypt = require("bcryptjs") as typeof import("bcryptjs");
 const { normalizeRichTextField } = require("../lib/brand-content") as typeof import("../lib/brand-content");
 const { generateMemberSiteSeo } = require("../lib/member-site-seo") as typeof import("../lib/member-site-seo");
+const { buildSafeErrorLog, maskEmail } = require("../lib/log-safety") as typeof import("../lib/log-safety");
+const { buildLegacyImportDryRunSummary, generateLegacyTemporaryPassword } = require("../lib/legacy-import-safety") as typeof import("../lib/legacy-import-safety");
 
 type TemplateKey = "brand_showcase" | "professional_service" | "simple_elegant";
 
@@ -103,7 +106,8 @@ type ImportReportRow = {
   brandId: string;
   account: string;
   usedLegacyPassword: boolean;
-  generatedPassword: string | null;
+  passwordGenerated: boolean;
+  passwordResetRequired: boolean;
   companyName: string | null;
   memberType: string;
   isRecommend: boolean;
@@ -113,6 +117,10 @@ type ImportReportRow = {
 };
 
 const prisma = new PrismaClient();
+const importRequestId = randomUUID();
+let importStage = "LEGACY_IMPORT_READ_SOURCE_FAILED";
+let currentLegacyId: string | null = null;
+let currentMaskedAccount: string | null = null;
 
 function usage() {
   console.log(
@@ -320,8 +328,8 @@ function normalizeLegacyPasswordHash(value: string | null) {
 }
 
 function buildFallbackPassword(row: LegacyCompanyRow) {
-  const legacyId = resolveLegacyKey(row);
-  return `Cnzm#${legacyId}`;
+  void row;
+  return generateLegacyTemporaryPassword();
 }
 
 function buildIntro(row: LegacyCompanyRow) {
@@ -549,6 +557,7 @@ async function findExistingMemberByEnterpriseIdentity(row: LegacyCompanyRow): Pr
 }
 
 async function main() {
+  importStage = "LEGACY_IMPORT_READ_SOURCE_FAILED";
   const args = parseArgs(process.argv.slice(2));
   const rows = readJsonFile<LegacyCompanyRow[]>(args.inputPath);
   const memberMap = args.memberMapPath ? readJsonFile<MemberMap>(args.memberMapPath) : {};
@@ -563,6 +572,9 @@ async function main() {
     const legacyId = resolveLegacyKey(row);
     const mappedMemberId = resolveMemberId(row, memberMap);
     const account = chooseAccount(row);
+    currentLegacyId = legacyId;
+    currentMaskedAccount = maskEmail(account);
+    importStage = "LEGACY_IMPORT_VALIDATE_FAILED";
     const normalizedLegacyPasswordHash = normalizeLegacyPasswordHash(asNullableString(row.user_password_hash));
     const generatedPassword = normalizedLegacyPasswordHash ? null : buildFallbackPassword(row);
     const nextMemberType = asNumber(row.is_vip) === 1 ? "enterprise_advanced" : "enterprise_basic";
@@ -588,9 +600,10 @@ async function main() {
         memberId: member?.id ?? "",
         enterpriseId: "",
         brandId: "",
-        account: member?.email ?? account,
+        account: maskEmail(member?.email ?? account),
         usedLegacyPassword: Boolean(normalizedLegacyPasswordHash),
-        generatedPassword,
+        passwordGenerated: Boolean(generatedPassword),
+        passwordResetRequired: Boolean(generatedPassword),
         companyName: enterprisePatch.companyShortName ?? enterprisePatch.companyName,
         memberType: args.syncMemberType ? nextMemberType : member?.memberType ?? nextMemberType,
         isRecommend: nextMemberType === "enterprise_advanced",
@@ -602,22 +615,18 @@ async function main() {
       if (args.siteSettings) siteSettingsCount += 1;
       console.log(
         JSON.stringify(
-          {
-            mode: "dry-run",
+          buildLegacyImportDryRunSummary({
             legacyId,
             memberId: member?.id ?? null,
             account: member?.email ?? account,
             usedLegacyPassword: Boolean(normalizedLegacyPasswordHash),
-            generatedPassword,
+            passwordGenerated: Boolean(generatedPassword),
             memberTypeBefore: member?.memberType ?? null,
             memberTypeAfter: args.syncMemberType ? nextMemberType : member?.memberType ?? nextMemberType,
-            enterprise: enterprisePatch,
-            brand: {
-              ...dryRunBrandPatch,
-              slug: buildPreferredBrandSlug(dryRunBrandPatch.name, legacyId),
-            },
-            siteSettings: args.siteSettings ? siteSettings : null,
-          },
+            enterprisePatch,
+            brandPatch: dryRunBrandPatch,
+            siteModules: args.siteSettings ? siteSettings.modules : null,
+          }),
           null,
           2
         )
@@ -627,6 +636,7 @@ async function main() {
 
     let createdMember = false;
 
+    importStage = "LEGACY_IMPORT_MEMBER_WRITE_FAILED";
     await prisma.$transaction(async (tx) => {
       if (!member) {
         const passwordHash = normalizedLegacyPasswordHash ?? (await bcrypt.hash(generatedPassword!, 10));
@@ -733,9 +743,10 @@ async function main() {
             select: { brand: { select: { id: true } } },
           })
         )?.brand?.id ?? "",
-      account: member.email,
+      account: maskEmail(member.email),
       usedLegacyPassword: Boolean(normalizedLegacyPasswordHash),
-      generatedPassword,
+      passwordGenerated: Boolean(generatedPassword),
+      passwordResetRequired: Boolean(generatedPassword),
       companyName: enterprisePatch.companyShortName ?? enterprisePatch.companyName,
       memberType: member.memberType,
       isRecommend: nextMemberType === "enterprise_advanced",
@@ -749,7 +760,7 @@ async function main() {
           })
         )?.brand?.slug ?? "",
     });
-    console.log(`imported legacy=${legacyId} -> member=${member.id} (${member.email})`);
+    console.log(`imported legacy=${legacyId} -> member=${member.id} (${maskEmail(member.email)})`);
   }
 
   console.log("");
@@ -765,6 +776,7 @@ async function main() {
   }
 
   if (args.reportPath) {
+    importStage = "LEGACY_IMPORT_REPORT_WRITE_FAILED";
     writeJsonFile(args.reportPath, report);
     console.log("");
     console.log(`Report written: ${args.reportPath}`);
@@ -773,7 +785,15 @@ async function main() {
 
 main()
   .catch((error) => {
-    console.error(error);
+    console.error("legacy company import failed", {
+      ...buildSafeErrorLog({
+        eventCode: importStage,
+        requestId: importRequestId,
+        stage: importStage,
+        targetId: currentLegacyId,
+      }, error),
+      account: currentMaskedAccount,
+    });
     process.exitCode = 1;
   })
   .finally(async () => {

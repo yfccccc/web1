@@ -14,7 +14,7 @@ import { generateUniqueArticleSlug } from "@/lib/slug";
 import { isContentReviewRequired } from "@/lib/app-settings";
 import { normalizeRichTextField } from "@/lib/brand-content";
 import { findDuplicateArticleByTitle, normalizeArticleTitle } from "@/lib/article-title";
-import { formatKeywordCsv, syncArticleKeywords } from "@/lib/news-keywords-v2";
+import { formatImportedKeywordCsv, formatKeywordCsv, syncArticleKeywords } from "@/lib/news-keywords-v2";
 import {
   findEffectiveCategoryAccess,
   findEffectiveSubcategoryAccess,
@@ -110,6 +110,7 @@ export async function POST(request: NextRequest) {
     relatedBrandIds,
     tagSlugs,
     manualKeywords,
+    syncWordKeywords,
     faqJson,
     syncToMainSite,
     isPinned,
@@ -233,7 +234,10 @@ export async function POST(request: NextRequest) {
       relatedBrandIds: typeof relatedBrandIds === "string" ? relatedBrandIds.trim() || null : null,
       faqJson: typeof faqJson === "string" ? faqJson.trim() || null : null,
       tagSlugs: resolvedTagSlugs.length > 0 ? resolvedTagSlugs.join(",") : null,
-      manualKeywords: typeof manualKeywords === "string" ? formatKeywordCsv(manualKeywords.split(/[,\n，]+/)) || null : null,
+      manualKeywords:
+        typeof manualKeywords === "string"
+          ? (syncWordKeywords === true ? formatImportedKeywordCsv(manualKeywords) : formatKeywordCsv(manualKeywords.split(/[,\n，]+/))) || null
+          : null,
       syncToMainSite: normalizedSyncToMainSite,
       isPinned: (session.role === "SUPER_ADMIN" || session.role === "ADMIN") && isPinned === true,
       publishedAt: submissionStatus === "approved" ? new Date() : null,
@@ -247,6 +251,7 @@ export async function POST(request: NextRequest) {
     title: normalizedTitle,
     content: normalizedContent,
     manualKeywords: typeof manualKeywords === "string" ? manualKeywords : null,
+    canonicalKeywords: syncWordKeywords === true && typeof manualKeywords === "string" ? manualKeywords : null,
   });
 
   await writeOperationLog({

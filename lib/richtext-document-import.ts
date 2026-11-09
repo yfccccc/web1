@@ -27,6 +27,7 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/webp": ".webp",
 };
 const IMPORT_IMAGE_OPTIMIZE_MIN_BYTES = 320 * 1024;
+const IMPORT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const IMPORT_IMAGE_MAX_WIDTH = 1600;
 const IMPORT_IMAGE_WEBP_QUALITY = 82;
 const GENERIC_FILENAME_TITLES = new Set(["doc", "docx", "document", "txt", "untitled", "wen-dang"]);
@@ -37,6 +38,9 @@ export type ImportedTitleSource = "heading" | "firstLine" | "filename" | "none";
 export type ImportedDocumentPayload = {
   title: string;
   titleSource: ImportedTitleSource;
+  summary: string;
+  keywords: string;
+  legacyKeywordMismatch: boolean;
   html: string;
   warnings: string[];
 };
@@ -47,6 +51,13 @@ type BlockMatch = {
   start: number;
   end: number;
   tag: string;
+};
+
+type MetadataKind = "title" | "summary" | "keywords" | "frontKeywords" | "backKeywords" | "body";
+
+type MetadataMarker = {
+  kind: MetadataKind;
+  value: string;
 };
 
 const BLOCK_TAG_PATTERN = /<(h[1-6]|p|div|section|article|figure)[^>]*>([\s\S]*?)<\/\1>/gi;
@@ -73,6 +84,25 @@ function normalizeBaseName(fileName: string) {
 
 function buildStoredImageName(ext: string) {
   return `${Date.now()}-${randomUUID().slice(0, 8)}${ext}`;
+}
+
+function hasExpectedImageSignature(imageBuffer: Buffer, mimeType: string) {
+  if (mimeType === "image/jpeg") return imageBuffer[0] === 0xff && imageBuffer[1] === 0xd8 && imageBuffer[2] === 0xff;
+  if (mimeType === "image/png") return imageBuffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  if (mimeType === "image/gif") return ["GIF87a", "GIF89a"].includes(imageBuffer.subarray(0, 6).toString("ascii"));
+  if (mimeType === "image/webp") return imageBuffer.subarray(0, 4).toString("ascii") === "RIFF" && imageBuffer.subarray(8, 12).toString("ascii") === "WEBP";
+  return false;
+}
+
+function validateImportedImage(imageBuffer: Buffer, mimeType: string) {
+  const normalizedMimeType = mimeType.toLowerCase();
+  if (!IMAGE_EXTENSIONS[normalizedMimeType]) throw new Error(`暂不支持 ${mimeType} 图片格式`);
+  if (imageBuffer.byteLength <= 0 || imageBuffer.byteLength > IMPORT_IMAGE_MAX_BYTES) {
+    throw new Error("Word 内嵌图片大小必须小于 5MB");
+  }
+  if (!hasExpectedImageSignature(imageBuffer, normalizedMimeType)) {
+    throw new Error("Word 内嵌图片内容与声明格式不一致");
+  }
 }
 
 async function optimizeImportedImage(
@@ -169,10 +199,6 @@ function normalizeImportedTitleText(input: string) {
     .trim();
 }
 
-function normalizeComparableTitle(input: string) {
-  return normalizeImportedTitleText(input).replace(/[^0-9A-Za-z\u4e00-\u9fff]+/g, "").toLowerCase();
-}
-
 function isReasonableStructuredTitleCandidate(rawText: string) {
   const text = normalizeImportedTitleText(rawText);
   if (!text) return false;
@@ -186,30 +212,6 @@ function isReasonableFilenameTitle(text: string) {
   if (GENERIC_FILENAME_TITLES.has(normalized.toLowerCase())) return false;
   if (/^\d+$/.test(normalized)) return false;
   return isReasonableStructuredTitleCandidate(normalized);
-}
-
-function extractLeadingBlock(html: string): BlockMatch | null {
-  const match = html.match(/^\s*<(h[1-6]|p|div|section|article|figure)[^>]*>([\s\S]*?)<\/\1>/i);
-  if (!match || typeof match.index !== "number") return null;
-  return {
-    full: match[0],
-    text: stripHtmlTags(match[2] ?? ""),
-    start: match.index,
-    end: match.index + match[0].length,
-    tag: String(match[1] ?? "").toLowerCase(),
-  };
-}
-
-function extractFirstHeadingBlock(html: string): BlockMatch | null {
-  const match = html.match(/<(h1)\b[^>]*>([\s\S]*?)<\/\1>/i);
-  if (!match || typeof match.index !== "number") return null;
-  return {
-    full: match[0],
-    text: stripHtmlTags(match[2] ?? ""),
-    start: match.index,
-    end: match.index + match[0].length,
-    tag: "h1",
-  };
 }
 
 function extractBlockMatches(html: string) {
@@ -230,52 +232,137 @@ function extractBlockMatches(html: string) {
   return matches;
 }
 
-function extractFirstMeaningfulBlock(html: string) {
-  return extractBlockMatches(html).find((block) => block.text.trim());
+function parseMetadataMarker(input: string): MetadataMarker | null {
+  const match = input.trim().match(/^(标题|摘要|关键词|前台关键词|后台关键词|正文)\s*[：:]\s*([\s\S]*)$/);
+  if (!match) return null;
+  const kindByLabel: Record<string, MetadataKind> = {
+    标题: "title",
+    摘要: "summary",
+    关键词: "keywords",
+    前台关键词: "frontKeywords",
+    后台关键词: "backKeywords",
+    正文: "body",
+  };
+  return { kind: kindByLabel[match[1]], value: match[2].trim() };
 }
 
-function detectTitleFromHtml(rawHtml: string, fallbackTitle: string) {
-  const heading = extractFirstHeadingBlock(rawHtml);
-  if (heading && isReasonableStructuredTitleCandidate(heading.text)) {
-    return { title: normalizeImportedTitleText(heading.text), titleSource: "heading" as const };
+function normalizeKeywordCsv(input: string) {
+  const seen = new Set<string>();
+  const keywords: string[] = [];
+  for (const raw of input.split(/[，,、;；]/)) {
+    const keyword = raw.trim();
+    if (!keyword || seen.has(keyword)) continue;
+    seen.add(keyword);
+    keywords.push(keyword);
   }
-
-  const leading = extractFirstMeaningfulBlock(rawHtml) ?? extractLeadingBlock(rawHtml);
-  if (leading && isReasonableStructuredTitleCandidate(leading.text)) {
-    return { title: normalizeImportedTitleText(leading.text), titleSource: "firstLine" as const };
-  }
-
-  if (isReasonableFilenameTitle(fallbackTitle)) {
-    return { title: normalizeImportedTitleText(fallbackTitle), titleSource: "filename" as const };
-  }
-
-  return { title: "", titleSource: "none" as const };
+  return keywords.join(",");
 }
 
-function dedupeLeadingTitleFromHtml(html: string, title: string, titleSource: ImportedTitleSource) {
-  if (!html || !title || (titleSource !== "heading" && titleSource !== "firstLine")) {
-    return html;
+function removeBlockRanges(html: string, blocks: BlockMatch[], removedIndexes: Set<number>) {
+  let cursor = 0;
+  let output = "";
+  blocks.forEach((block, index) => {
+    if (!removedIndexes.has(index)) return;
+    output += html.slice(cursor, block.start);
+    cursor = block.end;
+  });
+  return `${output}${html.slice(cursor)}`;
+}
+
+function parseDocumentMetadata(rawHtml: string, fallbackTitle: string) {
+  const blocks = extractBlockMatches(rawHtml);
+  const markers = blocks.map((block) => parseMetadataMarker(block.text));
+  const removedIndexes = new Set<number>();
+  const warnings: string[] = [];
+  let title = "";
+  let titleSource: ImportedTitleSource = "none";
+  let summary = "";
+  let keywordValue = "";
+  let frontKeywordValue = "";
+  let backKeywordValue = "";
+  let bodyMarkerIndex = -1;
+
+  for (let index = 0; index < markers.length; index += 1) {
+    const marker = markers[index];
+    if (!marker) continue;
+
+    if (marker.kind === "title" && !title) {
+      title = marker.value.trim();
+      titleSource = "firstLine";
+      removedIndexes.add(index);
+      continue;
+    }
+
+    if (marker.kind === "summary" && !summary) {
+      const summaryParts = marker.value ? [marker.value] : [];
+      removedIndexes.add(index);
+      if (!marker.value) {
+        for (let next = index + 1; next < blocks.length && !markers[next]; next += 1) {
+          const text = blocks[next].text.trim();
+          if (text) summaryParts.push(text);
+          removedIndexes.add(next);
+        }
+      }
+      summary = summaryParts.join("\n").trim();
+      continue;
+    }
+
+    if (["keywords", "frontKeywords", "backKeywords"].includes(marker.kind)) {
+      let value = marker.value;
+      removedIndexes.add(index);
+      if (!value) {
+        const next = index + 1;
+        if (next < blocks.length && !markers[next]) {
+          value = blocks[next].text.trim();
+          removedIndexes.add(next);
+        }
+      }
+      if (marker.kind === "keywords" && !keywordValue) keywordValue = value;
+      if (marker.kind === "frontKeywords" && !frontKeywordValue) frontKeywordValue = value;
+      if (marker.kind === "backKeywords" && !backKeywordValue) backKeywordValue = value;
+      continue;
+    }
+
+    if (marker.kind === "body" && bodyMarkerIndex < 0) bodyMarkerIndex = index;
   }
 
-  const normalizedTitle = normalizeComparableTitle(title);
-  if (!normalizedTitle) return html;
-
-  let nextHtml = html.trim();
-
-  while (nextHtml) {
-    const leading = extractFirstMeaningfulBlock(nextHtml) ?? extractLeadingBlock(nextHtml);
-    if (!leading) break;
-
-    const normalizedLeading = normalizeComparableTitle(leading.text);
-    if (!normalizedLeading || normalizedTitle !== normalizedLeading) break;
-
-    nextHtml = `${nextHtml.slice(0, leading.start)}${nextHtml.slice(leading.end)}`.trim();
+  if (!title) {
+    const titleIndex = blocks.findIndex((block, index) => {
+      if (markers[index] || !block.text.trim()) return false;
+      return isReasonableStructuredTitleCandidate(block.text);
+    });
+    if (titleIndex >= 0) {
+      title = normalizeImportedTitleText(blocks[titleIndex].text);
+      titleSource = "firstLine";
+      removedIndexes.add(titleIndex);
+    } else if (isReasonableFilenameTitle(fallbackTitle)) {
+      title = normalizeImportedTitleText(fallbackTitle);
+      titleSource = "filename";
+    }
   }
 
-  return nextHtml;
+  const normalizedFrontKeywords = normalizeKeywordCsv(frontKeywordValue);
+  const normalizedBackKeywords = normalizeKeywordCsv(backKeywordValue);
+  const legacyKeywordMismatch = Boolean(
+    normalizedFrontKeywords && normalizedBackKeywords && normalizedFrontKeywords !== normalizedBackKeywords
+  );
+  if (legacyKeywordMismatch) warnings.push("LEGACY_KEYWORD_MISMATCH=YES");
+  const keywords = normalizeKeywordCsv(keywordValue || normalizedFrontKeywords || normalizedBackKeywords);
+
+  let bodyHtml: string;
+  if (bodyMarkerIndex >= 0) {
+    const marker = markers[bodyMarkerIndex];
+    const inlineBody = marker?.value ? `<p>${escapeHtml(marker.value)}</p>` : "";
+    bodyHtml = `${inlineBody}${rawHtml.slice(blocks[bodyMarkerIndex].end)}`;
+  } else {
+    bodyHtml = removeBlockRanges(rawHtml, blocks, removedIndexes);
+  }
+
+  return { title, titleSource, summary, keywords, legacyKeywordMismatch, bodyHtml, warnings };
 }
 
 async function saveImportedImage(imageBuffer: Buffer, mimeType: string) {
+  validateImportedImage(imageBuffer, mimeType);
   const optimized = await optimizeImportedImage(imageBuffer, mimeType);
   const ext = optimized.ext;
   if (!ext) {
@@ -308,7 +395,7 @@ async function importDocx(file: File): Promise<ImportedDocumentPayload> {
           const base64 = await image.read("base64");
           const imageBuffer = Buffer.from(base64, "base64");
           const src = toUploadProxyUrl(await saveImportedImage(imageBuffer, mimeType));
-          return { src };
+          return { src, style: "display:block;max-width:100%;height:auto;margin:8px auto" };
         } catch (error) {
           const message = error instanceof Error ? error.message : "图片转存失败";
           warnings.push(message);
@@ -320,40 +407,22 @@ async function importDocx(file: File): Promise<ImportedDocumentPayload> {
 
   warnings.push(...result.messages.map((item) => item.message.trim()).filter(Boolean));
 
-  const titleResult = detectTitleFromHtml(result.value, fallbackTitle);
-  const sanitizedHtml = sanitizeRichText(result.value);
-  const dedupedHtml = dedupeLeadingTitleFromHtml(sanitizedHtml, titleResult.title, titleResult.titleSource);
-  if (!dedupedHtml) {
+  const parsed = parseDocumentMetadata(result.value, fallbackTitle);
+  warnings.push(...parsed.warnings);
+  const sanitizedHtml = sanitizeRichText(parsed.bodyHtml);
+  if (!sanitizedHtml) {
     throw new Error("文档中没有可导入的正文内容");
   }
 
   return {
-    title: titleResult.title,
-    titleSource: titleResult.titleSource,
-    html: dedupedHtml,
+    title: parsed.title,
+    titleSource: parsed.titleSource,
+    summary: parsed.summary,
+    keywords: parsed.keywords,
+    legacyKeywordMismatch: parsed.legacyKeywordMismatch,
+    html: sanitizedHtml,
     warnings,
   };
-}
-
-function removeLeadingTitleLineFromBlocks(blocks: string[], title: string) {
-  if (blocks.length === 0) return blocks;
-
-  const nextBlocks = [...blocks];
-  const firstBlockLines = nextBlocks[0].split("\n");
-  const firstMeaningfulLine = firstBlockLines.find((line) => line.trim()) ?? "";
-
-  if (normalizeComparableTitle(firstMeaningfulLine) !== normalizeComparableTitle(title)) {
-    return nextBlocks;
-  }
-
-  const remainingFirstBlock = firstBlockLines.slice(1).join("\n").trim();
-  if (remainingFirstBlock) {
-    nextBlocks[0] = remainingFirstBlock;
-    return nextBlocks;
-  }
-
-  nextBlocks.shift();
-  return nextBlocks;
 }
 
 async function importTxt(file: File): Promise<ImportedDocumentPayload> {
@@ -370,27 +439,24 @@ async function importTxt(file: File): Promise<ImportedDocumentPayload> {
     .map((block) => block.trim())
     .filter(Boolean);
 
-  const firstLine = normalized.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
-  const firstLineTitle = isReasonableStructuredTitleCandidate(firstLine) ? normalizeImportedTitleText(firstLine) : "";
-  const filenameTitle = isReasonableFilenameTitle(fallbackTitle) ? normalizeImportedTitleText(fallbackTitle) : "";
-  const title = firstLineTitle || filenameTitle || "";
-  const titleSource: ImportedTitleSource = firstLineTitle ? "firstLine" : filenameTitle ? "filename" : "none";
-
-  const bodyBlocks = titleSource === "firstLine" ? removeLeadingTitleLineFromBlocks(blocks, title) : blocks;
-
-  const html = bodyBlocks
+  const sourceHtml = blocks
     .map((block) => `<p>${escapeHtml(block).replace(/\n/g, "<br>")}</p>`)
     .join("");
+  const parsed = parseDocumentMetadata(sourceHtml, fallbackTitle);
+  const html = sanitizeRichText(parsed.bodyHtml);
 
   if (!html) {
     throw new Error("文档中没有可导入的正文内容");
   }
 
   return {
-    title,
-    titleSource,
+    title: parsed.title,
+    titleSource: parsed.titleSource,
+    summary: parsed.summary,
+    keywords: parsed.keywords,
+    legacyKeywordMismatch: parsed.legacyKeywordMismatch,
     html,
-    warnings: [],
+    warnings: parsed.warnings,
   };
 }
 

@@ -6,6 +6,23 @@ export type WhitelistSeedItem = {
   synonyms?: string[];
 };
 
+// New entities are learned from distinct saved articles, never preview requests.
+// Informational only: automatic promotion is disabled in the learner.
+export const NEWS_KEYWORD_PROMOTION_THRESHOLD = 3;
+// Runtime exclusion while database changes remain forbidden.
+export const NEWS_DISABLED_KEYWORDS = ["符合国际", "除了整木"];
+export const NEWS_ENTITY_STRIP_PREFIXES = [
+  "以下简称", "以下称", "由于", "以及",
+  "由", "根据", "除了", "担任", "对于", "关于", "随着", "在",
+  "把", "被", "让", "以", "为", "从", "对", "用",
+];
+export const NEWS_ENTITY_FORBIDDEN_PARTS = [
+  "视作", "这位", "最为", "搭建", "重构", "和家居",
+  "根据", "除了", "对于", "关于", "随着", "担任", "表示", "宣布",
+  "成为", "报道", "消息", "获悉", "近日", "日前", "再次", "以及", "的", "了",
+];
+export const NEWS_DISPLAY_KEYWORD_FORBIDDEN_PARTS = ["的", "了", "由", "根据", "除了", "依托"];
+
 export const NEWS_STOPWORDS = [
   "的",
   "了",

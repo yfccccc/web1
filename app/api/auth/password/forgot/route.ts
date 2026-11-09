@@ -1,8 +1,10 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { randomUUID } from "node:crypto";
 import { issuePasswordResetForMember } from "@/lib/password-recovery";
 import { writeOperationLog } from "@/lib/operation-log";
 import { consumeRateLimit, createRateLimitResponse, getClientIp } from "@/lib/rate-limit";
+import { buildSafeErrorLog, maskEmail } from "@/lib/log-safety";
 
 export const dynamic = "force-dynamic";
 const PASSWORD_FORGOT_WINDOW_MS = 30 * 60 * 1000;
@@ -16,6 +18,9 @@ function normalizeAccount(value: unknown) {
 const GENERIC_SUCCESS_MESSAGE = "如果账号存在且已配置找回邮箱，系统会发送密码重置说明。";
 
 export async function POST(request: NextRequest) {
+  const requestId = randomUUID();
+  let targetId: string | null = null;
+  let stage = "validate_request";
   try {
     const ipLimit = consumeRateLimit({
       scope: "auth-password-forgot:ip",
@@ -62,6 +67,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    targetId = member.id;
+    stage = "deliver_password_reset";
     const result = await issuePasswordResetForMember({
       member,
     });
@@ -107,7 +114,7 @@ export async function POST(request: NextRequest) {
       action: "password_reset_requested",
       targetType: "member",
       targetId: member.id,
-      detail: JSON.stringify({ deliveryEmail: result.deliveryEmail }),
+      detail: JSON.stringify({ deliveryEmail: maskEmail(result.deliveryEmail) }),
     });
 
     return NextResponse.json({
@@ -120,7 +127,13 @@ export async function POST(request: NextRequest) {
           : undefined,
     });
   } catch (error) {
-    console.error("POST /api/auth/password/forgot", error);
+    console.error("POST /api/auth/password/forgot", buildSafeErrorLog({
+      eventCode: "PASSWORD_FORGOT_DELIVERY_FAILED",
+      requestId,
+      targetId,
+      actorId: targetId,
+      stage,
+    }, error));
     return NextResponse.json(
       {
         error: "邮件发送失败，请稍后重试或提交人工找回申请。",

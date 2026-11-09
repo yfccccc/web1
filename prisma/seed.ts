@@ -99,25 +99,38 @@ async function main() {
     },
   });
 
-  // 使用固定主管理员默认凭证作为恢复入口，环境变量存在时优先覆盖。
-  await prisma.member.deleteMany({});
+  // The regular seed never deletes members or overwrites an existing admin.
+  // It creates an initial super administrator only when the account is absent,
+  // and aborts on a role conflict so privilege is never auto-elevated.
   const adminAccount = getRequiredEnv("ADMIN_ACCOUNT");
-  const adminPassword = getRequiredEnv("ADMIN_PASSWORD");
-  const adminName = getRequiredEnv("ADMIN_NAME");
-  const initialPassword = adminPassword;
-  const adminHash = await bcrypt.hash(initialPassword, 10);
-  await prisma.member.create({
-    data: {
-      email: adminAccount,
-      name: adminName,
-      passwordHash: adminHash,
-      role: "SUPER_ADMIN",
-      membershipLevel: "admin",
-      memberType: "enterprise_advanced",
-      rankingWeight: 100,
-    },
+  const existingAdmin = await prisma.member.findUnique({
+    where: { email: adminAccount },
+    select: { id: true, role: true },
   });
-  console.log(`已重置主管理员账号：${adminAccount}`);
+
+  if (existingAdmin && existingAdmin.role !== "SUPER_ADMIN") {
+    throw new Error("ADMIN_ACCOUNT already exists with an unexpected role; manual review is required.");
+  }
+
+  if (!existingAdmin) {
+    const adminPassword = getRequiredEnv("ADMIN_PASSWORD");
+    const adminName = getRequiredEnv("ADMIN_NAME");
+    const adminHash = await bcrypt.hash(adminPassword, 10);
+    await prisma.member.create({
+      data: {
+        email: adminAccount,
+        name: adminName,
+        passwordHash: adminHash,
+        role: "SUPER_ADMIN",
+        membershipLevel: "admin",
+        memberType: "enterprise_advanced",
+        rankingWeight: 100,
+      },
+    });
+    console.log("Initial administrator created.");
+  } else {
+    console.log("Initial administrator already exists; no account data was changed.");
+  }
 
   const existing = await prisma.category.count();
   if (existing === 0) {

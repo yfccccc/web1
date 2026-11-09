@@ -101,7 +101,7 @@
 下面是按当前仓库实际用途整理后的关键目录：
 
 ```text
-WEB/
+web1/
 ├─ app/
 │  ├─ api/                      # 服务端路由：auth / member / admin / upload / og
 │  ├─ awards/                   # 评选与榜单
@@ -127,11 +127,21 @@ WEB/
 │  └─ README.md                 # Prisma 使用说明
 ├─ public/                      # 静态资源
 ├─ types/                       # TypeScript 类型
+├─ data/                        # 版本化的示例与业务数据
+├─ scripts/                     # 运维、迁移、审计与自测脚本
 ├─ custom/
 │  ├─ notes/                    # 正式迭代记录
 │  └─ experiments/              # 临时材料与实验产物
+├─ docs/                        # 长期文档与旧站兼容说明
+├─ artifacts/                   # 验收截图与验收报告
+├─ reports/                     # 审计及变更报告
+├─ dist/                        # 手工生成的发布包（非应用运行依赖）
 └─ README.md
 ```
+
+`node_modules/`、`.next/`、`.codex-temp/`、`.release-worktrees/`、`tmp*/`、日志和
+`*.tsbuildinfo` 都是依赖、构建缓存或本地工作产物，不属于项目源码，已通过
+`.gitignore` 与源码目录隔离。
 
 ## 8. 环境变量
 

@@ -1,9 +1,11 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { ArticleViewTracker } from "@/components/ArticleViewTracker";
 import { ContentHeroImage } from "@/components/ContentHeroImage";
 import { JsonLd } from "@/components/JsonLd";
+import { NewsArticleJsonLd } from "@/components/NewsArticleJsonLd";
+import { isDisplayNewsKeyword } from "@/lib/news-keyword-rules";
 import { previewText } from "@/lib/text";
 import { RichContent } from "@/components/RichContent";
 import { NewsUrlSync } from "./NewsUrlSync";
@@ -145,7 +147,7 @@ function parseKeywordList(keywordSource?: string | null) {
       `${keywordSource || ""}`
         .split(/[,\n，、]+/)
         .map((item) => item.trim())
-        .filter((item) => isValidKeywordCandidate(item)),
+        .filter((item) => isValidKeywordCandidate(item) && isDisplayNewsKeyword(item)),
     ),
   ).slice(0, 5);
 }
@@ -367,7 +369,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
   const publicBaseUrl = articleUrl.replace(/\/news\/.*$/, "");
   const articleShareImage = resolveArticleShareImage(article);
   const articleSection = resolveNewsSectionLabel(article.subHref, article.categoryHref);
-  const keywords = parseKeywordList(article.manualKeywords ?? article.keywords);
+  const keywords = parseKeywordList(article.manualKeywords?.trim() || article.keywords);
   const faqPairs = parseFaqPairs(article.faqPairsJson ?? article.faqJson);
   const recommendedArticles = await getRecommendedNews(article.id, 4);
   const sourceSummary = buildArticleSourceSummary(article);
@@ -405,7 +407,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
 
   const articleSchema = {
     "@context": "https://schema.org",
-    "@type": "Article",
+    "@type": "NewsArticle",
     "@id": `${articleUrl}#article`,
     headline: displayTitle,
     description: previewText(displayExcerpt || displayContent, 200),
@@ -418,6 +420,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
     publisher: { "@id": `${publicBaseUrl}/#organization` },
     articleSection,
     keywords: keywords.length > 0 ? keywords.join(", ") : undefined,
+    about: keywords.length > 0 ? keywords.map((name) => ({ "@type": "Thing", name })) : undefined,
     thumbnailUrl: articleShareImage.startsWith("http") ? articleShareImage : `${publicBaseUrl}${articleShareImage}`,
     isAccessibleForFree: true,
     image: [
@@ -460,7 +463,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
     <article id="news-reading-article" className="mx-auto max-w-6xl px-4 pb-6 pt-2 sm:px-6 sm:py-12">
       <NewsUrlSync canonicalPath={buildNewsPath(articleSegment)} />
       <ArticleViewTracker articleId={article.id} />
-      <JsonLd data={articleSchema} />
+      <NewsArticleJsonLd data={articleSchema} />
       <JsonLd data={breadcrumbSchema} />
       {faqSchema ? <JsonLd data={faqSchema} /> : null}
 

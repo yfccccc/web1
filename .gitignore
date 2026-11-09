@@ -16,19 +16,12 @@ build
 .env.test.local
 .env.production.local
 
-# debug
+# debug / runtime logs
+*.log
+*.log.*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.next-dev.log
-.next-dev.err.log
-build.log
-build.err.log
-dev.log
-dev.err.log
-dev.out.log
-preview.out.log
-preview.err.log
 
 # ide
 .cursor/
@@ -41,7 +34,13 @@ preview.err.log
 .DS_Store
 Thumbs.db
 
+# generated caches and local tool workspaces
+*.tsbuildinfo
+/.codex-temp/
+/.release-worktrees/
+
 # local temp artifacts
+/tmp/
 .tmp-*
 tmp-*
 tmp_*/

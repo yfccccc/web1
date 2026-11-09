@@ -23,6 +23,7 @@
     "selftest:news-keywords": "node scripts/selftest-news-keywords.js",
     "selftest:news-pagination": "node scripts/selftest-news-pagination.mjs",
     "selftest:pending-brand-threshold": "node scripts/selftest-pending-brand-threshold.js",
+    "selftest:security-guards": "node scripts/selftest-security-guards.js",
     "push:baidu": "ts-node --transpile-only -P scripts/tsconfig.scripts.json scripts/push-baidu.ts",
     "baidu:daily-sync": "ts-node --transpile-only -P scripts/tsconfig.scripts.json scripts/baidu-daily-sync.ts",
     "generate:seo-news": "ts-node --transpile-only -r tsconfig-paths/register -P scripts/tsconfig.scripts.json scripts/generate-seo-news.ts",

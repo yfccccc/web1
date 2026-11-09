@@ -15,14 +15,18 @@ import { Mark, type JSONContent } from "@tiptap/core";
 import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { MAX_UPLOAD_IMAGE_MB, uploadImageToServer, uploadRemoteImageToServer } from "@/lib/client-image";
 import { sanitizeRichText } from "@/lib/brand-content";
+import { readImportedDocumentMetadata, type ImportedDocumentMetadata } from "@/lib/richtext-import-contract";
 
-const DOCUMENT_IMPORT_HELP_TEXT = "支持 .docx、.txt 格式，文件大小小于 10MB。导入后可自动识别标题，并导入正文、图片和表格。";
+const DOCUMENT_IMPORT_HELP_TEXT = "支持 .docx、.txt 格式，文件大小小于 10MB。导入后可自动识别标题、摘要、关键词，并按原顺序导入正文、图片和链接。";
 
 
 type Props = {
   value: string;
   onChange: (html: string) => void;
   onImportedTitle?: (title: string, meta?: { source?: string }) => void;
+  onImportedSummary?: (summary: string) => void;
+  onImportedKeywords?: (keywords: string) => void;
+  onImportedMetadata?: (metadata: ImportedDocumentMetadata) => void;
   minHeight?: number;
   placeholder?: string;
   allowClipboardImagePaste?: boolean;
@@ -868,6 +872,9 @@ export function RichEditor({
   value,
   onChange,
   onImportedTitle,
+  onImportedSummary,
+  onImportedKeywords,
+  onImportedMetadata,
   minHeight = 260,
   placeholder = "请输入正文...",
   allowClipboardImagePaste = false,
@@ -1340,10 +1347,13 @@ export function RichEditor({
         throw new Error(typeof result.error === "string" ? result.error : "导入文档失败");
       }
 
-      if (typeof result.title === "string" && result.title.trim()) {
-        onImportedTitle?.(result.title.trim(), {
-          source: typeof result.titleSource === "string" ? result.titleSource : undefined,
-        });
+      const metadata = readImportedDocumentMetadata(result);
+      if (onImportedMetadata) {
+        onImportedMetadata(metadata);
+      } else {
+        if (metadata.title) onImportedTitle?.(metadata.title, { source: metadata.titleSource });
+        if (metadata.summary) onImportedSummary?.(metadata.summary);
+        if (metadata.keywords) onImportedKeywords?.(metadata.keywords);
       }
 
       const sanitizedHtml = typeof result.html === "string" ? result.html.trim() : "";

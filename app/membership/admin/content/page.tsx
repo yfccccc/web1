@@ -54,6 +54,7 @@ import {
 import { slugify } from "@/lib/slug";
 import { InlinePageBackLink } from "@/components/InlinePageBackLink";
 import { buildDirtyTextErrorMessage } from "@/lib/article-input-guard";
+import type { ImportedDocumentMetadata } from "@/lib/richtext-import-contract";
 
 function LazyPanelPlaceholder({ label }: { label: string }) {
   return (
@@ -412,6 +413,7 @@ export default function AdminContentPage() {
   const [coverPreviewSrc, setCoverPreviewSrc] = useState("");
   const [tagSlugs, setTagSlugs] = useState("");
   const [manualKeywords, setManualKeywords] = useState("");
+  const [wordKeywordsImported, setWordKeywordsImported] = useState(false);
   const [recommendIds, setRecommendIds] = useState("");
   const [productRecommendations, setProductRecommendations] = useState("");
   const [isPinned, setIsPinned] = useState(false);
@@ -486,19 +488,23 @@ export default function AdminContentPage() {
     []
   );
 
-  const handleImportedPublishTitle = useCallback(
-    (nextTitle: string) => {
-      applyImportedTitle(nextTitle, title, setTitle, "标题");
-    },
-    [applyImportedTitle, title]
-  );
-
   const handleImportedEditTitle = useCallback(
     (nextTitle: string) => {
       applyImportedTitle(nextTitle, editTitle, setEditTitle, "编辑标题");
     },
     [applyImportedTitle, editTitle]
   );
+
+  const handleImportedPublishMetadata = useCallback((metadata: ImportedDocumentMetadata) => {
+    if (metadata.title) applyImportedTitle(metadata.title, title, setTitle, "标题");
+    if (metadata.summary && (!excerpt.trim() || excerpt.trim() === metadata.summary || window.confirm("是否用 Word 摘要替换当前摘要？"))) {
+      setExcerpt(metadata.summary);
+    }
+    if (tab === "articles" && metadata.keywords && (!manualKeywords.trim() || manualKeywords.trim() === metadata.keywords || window.confirm("是否用 Word 关键词替换当前关键词？"))) {
+      setManualKeywords(metadata.keywords);
+      setWordKeywordsImported(true);
+    }
+  }, [applyImportedTitle, excerpt, manualKeywords, tab, title]);
 
 
   const selectedTabDef = useMemo(() => CONTENT_TAB_DEFS.find((x) => x.key === tab) ?? CONTENT_TAB_DEFS[0], [tab]);
@@ -562,6 +568,7 @@ export default function AdminContentPage() {
     setCoverImage("");
     setTagSlugs("");
     setManualKeywords("");
+    setWordKeywordsImported(false);
     setRecommendIds("");
     setProductRecommendations("");
     setIsPinned(false);
@@ -1030,6 +1037,7 @@ export default function AdminContentPage() {
       subHref: subOptions.length > 0 ? subHref || null : null,
       tagSlugs: tagSlugs || null,
       manualKeywords: manualKeywords || null,
+      syncWordKeywords: wordKeywordsImported,
       recommendIds: recommendIds || null,
       productRecommendations: productRecommendations || null,
       faqJson: tab === "terms" || tab === "standards" ? stringifyDocumentMetadata(documentMeta) : null,
@@ -1079,6 +1087,7 @@ export default function AdminContentPage() {
     setCoverImage("");
     setTagSlugs("");
     setManualKeywords("");
+    setWordKeywordsImported(false);
     setRecommendIds("");
     setProductRecommendations("");
     setIsPinned(false);
@@ -1754,7 +1763,7 @@ export default function AdminContentPage() {
                 <RichEditor
                   value={content}
                   onChange={setContent}
-                  onImportedTitle={handleImportedPublishTitle}
+                  onImportedMetadata={handleImportedPublishMetadata}
                   minHeight={360}
                   placeholder="支持标题分级、表格、图片和条款结构的标准正文编辑。"
                   allowClipboardImagePaste
@@ -1787,7 +1796,7 @@ export default function AdminContentPage() {
             {isRichTextArticleTab(tab) && (
               <>
                 <label className="block text-sm text-muted">正文</label>
-                <RichEditor value={content} onChange={setContent} onImportedTitle={handleImportedPublishTitle} minHeight={300} placeholder="" allowClipboardImagePaste toolbarIcons statusResetKey={`admin-publish:${tab}:${publishEditorStatusVersion}`} />
+                <RichEditor value={content} onChange={setContent} onImportedMetadata={handleImportedPublishMetadata} minHeight={300} placeholder="" allowClipboardImagePaste toolbarIcons statusResetKey={`admin-publish:${tab}:${publishEditorStatusVersion}`} />
               </>
             )}
             {tab === "brands" && (
